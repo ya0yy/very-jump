@@ -1,0 +1,37 @@
+# IDE configuration files
+.idea/
+.cursor/
+.claude/
+*.iml
+*.xml
+!/Users/yaoyang/Documents/source/very-jump/.idea/inspectionProfiles/Project_Default.xml
+
+# macOS specific
+.DS_Store
+
+# Log files
+*.log
+*.out
+server.log
+server.out
+/data/logs/
+
+# Node dependencies
+web-app/node_modules/
+
+# Build artifacts
+bin/
+/bin/
+web/dist/
+
+# Data files
+data/very-jump.db
+data/very-jump.db-shm
+data/very-jump.db-wal
+data/temp_keys/
+
+# Temporary expect scripts
+*.exp
+
+# Bundles
+web-bundles/

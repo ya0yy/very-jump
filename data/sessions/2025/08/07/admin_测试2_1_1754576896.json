@@ -1,0 +1,85 @@
+{"events":[],"start_time":1754576896,"version":"1.0"}
+
+{"timestamp":458,"type":"output","data":"Welcome to Ubuntu 20.04.6 LTS (GNU/Linux 5.4.0-216-generic x86_64)\r\n\r\n * Documentation:  https://help.ubuntu.com\r\n * Management:     https://landscape.canonical.com\r\n * Support:        https://ubuntu.com/advantage\r\n\r\n  System information as of Thu Aug  7 10:28:16 PM CST 2025\r\n\r\n  System load:                      0.01953125\r\n  Usage of /:                       62.8% of 96.33GB\r\n  Memory usage:                     32%\r\n  Swap usage:                       0%\r\n  Processes:                        161\r\n  Users logged in:                  1\r\n  IPv4 address for br-0bf7641161a9: 172.27.0.1\r\n  IPv4 address for br-2d4a5322ba83: 172.22.0.1\r\n  IPv4 address for br-5b6fbbcf7b81: 172.26.0.1\r\n  IPv4 address for br-a280e4609c59: 172.25.0.1\r\n  IPv4 address for br-e05aab0ebd64: 172.18.0.1\r\n  IPv4 address for docker0:         172.17.0.1\r\n  IPv4 address for ens18:           192.168.119.44\r\n\r\n * Ubuntu 20.04 LTS Focal Fossa has reached its end of standard support on 31 Ma\r\n \r\n   For more details see:\r\n   https://ubuntu.com/20-04\r\n"}
+
+{"timestamp":459,"type":"output","data":"\r\n * Introducing Expanded Security Maintenance for Applications.\r\n   Receive updates to over 25,000 software packages with your\r\n   Ubuntu Pro subscription. Free for personal use.\r\n\r\n     https://ubuntu.com/pro\r\n\r\nExpanded Security Maintenance for Infrastructure is not enabled.\r\n\r\n557 updates can be applied immediately.\r\nTo see these additional updates run: apt list --upgradable\r\n\r\n44 additional security updates can be applied with ESM Infra.\r\nLearn more about enabling ESM Infra service for Ubuntu 20.04 at\r\nhttps://ubuntu.com/20-04\r\n\r\nNew release '22.04.5 LTS' available.\r\nRun 'do-release-upgrade' to upgrade to it.\r\n\r\n\r\nLast login: Thu Aug  7 22:26:06 2025 from 192.168.119.33\r\r\n"}
+
+{"timestamp":488,"type":"output","data":"\u001b]0;yaoyang@eden: ~\u0007\u001b[01;32myaoyang@eden\u001b[00m:\u001b[01;34m~\u001b[00m$ "}
+
+{"timestamp":2861,"type":"input","data":"{\"type\":\"resize\",\"data\":{\"cols\":213,\"rows\":41}}"}
+
+{"timestamp":2876,"type":"output","data":"{\"type\":\"resize\",\"data\":{\"cols\":213,\"rows\":41}}"}
+
+{"timestamp":6012,"type":"input","data":"{\"type\":\"resize\",\"data\":{\"cols\":175,\"rows\":23}}"}
+
+{"timestamp":6029,"type":"output","data":"{\"type\":\"resize\",\"data\":{\"cols\":175,\"rows\":23}}"}
+
+{"timestamp":10836,"type":"input","data":"l"}
+
+{"timestamp":10857,"type":"output","data":"l"}
+
+{"timestamp":10961,"type":"input","data":"l"}
+
+{"timestamp":10980,"type":"output","data":"l"}
+
+{"timestamp":11205,"type":"input","data":"\r"}
+
+{"timestamp":11232,"type":"output","data":"\r\n"}
+
+{"timestamp":11903,"type":"output","data":"type:resizetype:resizell: command not found\r\n"}
+
+{"timestamp":11908,"type":"output","data":"\u001b]0;yaoyang@eden: ~\u0007\u001b[01;32myaoyang@eden\u001b[00m:\u001b[01;34m~\u001b[00m$ "}
+
+{"timestamp":13233,"type":"input","data":"l"}
+
+{"timestamp":13246,"type":"output","data":"l"}
+
+{"timestamp":13351,"type":"input","data":"l"}
+
+{"timestamp":13363,"type":"output","data":"l"}
+
+{"timestamp":13593,"type":"input","data":"\r"}
+
+{"timestamp":13606,"type":"output","data":"\r\n"}
+
+{"timestamp":13606,"type":"output","data":"total 30020\r\ndrwxr-xr-x 3 yaoyang yaoyang     4096 Sep 15  2023 \u001b[0m\u001b[01;34malertmanager-0.25.1.linux-amd64\u001b[0m\u001b[K/\r\n-rw-rw-r-- 1 yaoyang yaoyang 29284120 Aug 24  2023 \u001b[01;31malertmanager-0.25.1.linux-amd64.tar.gz\u001b[0m\u001b[K\r\ndrwxr-xr-x 2 yaoyang yaoyang     4096 Sep  2  2023 \u001b[01;34mdata\u001b[0m\u001b[K/\r\ndrwxrwxr-x 4 yaoyang yaoyang     4096 Sep 22  2023 \u001b[01;34mloki-example\u001b[0m\u001b[K/\r\n-rw------- 1 yaoyang yaoyang  1423740 Aug 25  2023 nohup.out\r\ndrwx------ 3 yaoyang yaoyang     4096 Aug 17  2023 \u001b[01;34msnap\u001b[0m\u001b[K/\r\ndrwxrwxr-x 2 yaoyang yaoyang     4096 Sep  6  2023 \u001b[01;34mswarmpit\u001b[0m\u001b[K/\r\ndrwxrwxr-x 3 yaoyang yaoyang     4096 Sep  5  2023 \u001b[01;34mteamcity\u001b[0m\u001b[K/\r\n\u001b]0;yaoyang@eden: ~\u0007\u001b[01;32myaoyang@eden\u001b[00m:\u001b[01;34m~\u001b[00m$ "}
+
+{"timestamp":15247,"type":"input","data":"{\"type\":\"resize\",\"data\":{\"cols\":213,\"rows\":41}}"}
+
+{"timestamp":15259,"type":"output","data":"{\"type\":\"resize\",\"data\":{\"cols\":213,\"rows\":41}}"}
+
+{"timestamp":20529,"type":"input","data":"\u001b[B"}
+
+{"timestamp":20543,"type":"output","data":"\u0007"}
+
+{"timestamp":20834,"type":"input","data":"\u001b[B"}
+
+{"timestamp":20848,"type":"output","data":"\u0007"}
+
+{"timestamp":21104,"type":"input","data":"\u001b[A"}
+
+{"timestamp":21120,"type":"output","data":"\u001b[A\u001b[A\r\u001b]0;yaoyang@eden: ~\u0007\u001b[01;32myaoyang@eden\u001b[00m:\u001b[01;34m~\u001b[00m$ ll\u001b[K\r\n\r\u001b[K\r\n\r\u001b[K\u001b[A\u001b[A\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C"}
+
+{"timestamp":21727,"type":"input","data":"\u001b[B"}
+
+{"timestamp":21743,"type":"output","data":"\u0008\u0008{\"type\":\"resize\",\"data\":{\"cols\":213,\"rows\":41}}"}
+
+{"timestamp":22203,"type":"input","data":"\u001b[A"}
+
+{"timestamp":22225,"type":"output","data":"\u001b[A\u001b[A\r\u001b]0;yaoyang@eden: ~\u0007\u001b[01;32myaoyang@eden\u001b[00m:\u001b[01;34m~\u001b[00m$ ll\u001b[K\r\n\r\u001b[K\r\n\r\u001b[K\u001b[A\u001b[A\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C"}
+
+{"timestamp":22690,"type":"input","data":"\u001b[B"}
+
+{"timestamp":22707,"type":"output","data":"\u0008\u0008{\"type\":\"resize\",\"data\":{\"cols\":213,\"rows\":41}}"}
+
+{"timestamp":23024,"type":"input","data":"\u001b[A"}
+
+{"timestamp":23040,"type":"output","data":"\u001b[A\u001b[A\r\u001b]0;yaoyang@eden: ~\u0007\u001b[01;32myaoyang@eden\u001b[00m:\u001b[01;34m~\u001b[00m$ ll\u001b[K\r\n\r\u001b[K\r\n\r\u001b[K\u001b[A\u001b[A\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C"}
+
+{"timestamp":23761,"type":"input","data":"\u001b[B"}
+
+{"timestamp":23784,"type":"output","data":"\u0008\u0008{\"type\":\"resize\",\"data\":{\"cols\":213,\"rows\":41}}"}
+
+{"timestamp":24026,"type":"input","data":"\u001b[A"}
+
+{"timestamp":24040,"type":"output","data":"\u001b[A\u001b[A\r\u001b]0;yaoyang@eden: ~\u0007\u001b[01;32myaoyang@eden\u001b[00m:\u001b[01;34m~\u001b[00m$ ll\u001b[K\r\n\r\u001b[K\r\n\r\u001b[K\u001b[A\u001b[A\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C"}
