@@ -29,6 +29,9 @@ set port [lindex $argv 3]
 # 设置超时时间
 set timeout 30
 
+# 关闭命令回显
+log_user 0
+
 # 启动 SSH 连接
 spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $username@$host -p $port
 
@@ -36,6 +39,8 @@ spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $username@
 expect {
     "*password:*" {
         send "$password\r"
+        # 重新开启命令回显
+        log_user 1
         expect {
             "*$*" {
                 # 成功登录，进入交互模式
