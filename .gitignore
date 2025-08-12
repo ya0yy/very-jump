@@ -14,7 +14,9 @@
 *.out
 server.log
 server.out
-/data/logs/
+
+# data
+data
 
 # Node dependencies
 web-app/node_modules/
