@@ -72,32 +72,40 @@ type TTYDService struct {
 	dataDir        string
 	processes      map[string]*TTYDProcess // key: sessionID, value: ttyd进程信息
 	mutex          sync.RWMutex
-	basePort       int // 基础端口号，从7681开始
+	basePort       int           // 基础端口号，从7681开始
 	auditService   *AuditService // 审计服务
 	sessionService *models.SessionService
+	recordingsDir  string // 录制文件存储目录
 }
 
 // TTYDProcess ttyd进程信息
 type TTYDProcess struct {
-	SessionID  string
-	UserID     int
-	Username   string
-	ServerID   int
-	ServerName string // 添加服务器名称字段
-	Port       int
-	Process    *os.Process
-	Cancel     context.CancelFunc
-	CreatedAt  time.Time
+	SessionID     string
+	UserID        int
+	Username      string
+	ServerID      int
+	ServerName    string // 添加服务器名称字段
+	Port          int
+	Process       *os.Process
+	Cancel        context.CancelFunc
+	CreatedAt     time.Time
+	RecordingFile string // 录制文件路径
+	DBSessionID   string // 数据库中的会话ID
 }
 
 // NewTTYDService 创建ttyd服务
 func NewTTYDService(dataDir string, auditService *AuditService, sessionService *models.SessionService) *TTYDService {
+	recordingsDir := filepath.Join(dataDir, "recordings")
+	// 确保录制目录存在
+	os.MkdirAll(recordingsDir, 0755)
+
 	return &TTYDService{
 		dataDir:        dataDir,
 		processes:      make(map[string]*TTYDProcess),
 		basePort:       7681,
 		auditService:   auditService,
 		sessionService: sessionService,
+		recordingsDir:  recordingsDir,
 	}
 }
 
@@ -136,6 +144,11 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 	// 查找可用端口
 	port := ts.findAvailablePort()
 
+	// 创建录制文件路径（暂时预留，后续实现应用层录制）
+	timestamp := time.Now().Format("20060102_150405")
+	recordingFileName := fmt.Sprintf("%s_%s_%s.cast", sessionID, timestamp, server.Name)
+	recordingFilePath := filepath.Join(ts.recordingsDir, recordingFileName)
+
 	// 组装 ttyd 启动参数（命令与参数分开传递给 ttyd）
 	args := []string{
 		"-p", fmt.Sprintf("%d", port),
@@ -153,7 +166,7 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 			return nil, fmt.Errorf("创建expect脚本失败: %v", err)
 		}
 		log.Printf("DEBUG: Expect script params: user=%s, pass=[REDACTED], host=%s, port=%d", server.Username, server.Host, server.Port)
-		// ttyd 后接 expect 可执行程序、脚本及其参数，避免 shebang 兼容性问题
+		// 直接使用expect脚本，不依赖系统录制命令
 		args = append(args,
 			"expect",
 			expectScript,
@@ -187,21 +200,10 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 	// 启动真实的ttyd进程
 	log.Printf("启动ttyd进程: port=%d, args=%v", port, args)
 	cmd := exec.CommandContext(ctx, "ttyd", args...)
+	log.Printf("启动ttyd进程时当前目录是： %v", cmd.Dir)
 
 	// 设置环境变量
 	env := os.Environ()
-	// 确保PATH包含常见的二进制路径
-	pathFound := false
-	for i, envVar := range env {
-		if strings.HasPrefix(envVar, "PATH=") {
-			env[i] = envVar + ":/usr/local/bin:/opt/homebrew/bin:/Users/yaoyang/homebrew/bin"
-			pathFound = true
-			break
-		}
-	}
-	if !pathFound {
-		env = append(env, "PATH=/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:/Users/yaoyang/homebrew/bin")
-	}
 
 	cmd.Env = append(env,
 		"TERM=xterm-256color",
@@ -234,15 +236,16 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 
 	// 创建进程信息
 	process := &TTYDProcess{
-		SessionID:  sessionID,
-		UserID:     userID,
-		Username:   username,
-		ServerID:   server.ID,
-		ServerName: server.Name, // 填充服务器名称
-		Port:       port,
-		Process:    cmd.Process,
-		Cancel:     cancel,
-		CreatedAt:  time.Now(),
+		SessionID:     sessionID,
+		UserID:        userID,
+		Username:      username,
+		ServerID:      server.ID,
+		ServerName:    server.Name, // 填充服务器名称
+		Port:          port,
+		Process:       cmd.Process,
+		Cancel:        cancel,
+		CreatedAt:     time.Now(),
+		RecordingFile: recordingFilePath,
 	}
 
 	// 保存进程信息
@@ -263,10 +266,20 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 	// 创建历史会话记录
 	if ts.sessionService != nil {
 		go func() {
-			// 将来可以实现会话录制功能，并将文件路径保存在这里
-			recordingFile := ""
-			if _, err := ts.sessionService.Create(userID, server.ID, ipAddress, recordingFile); err != nil {
+			// 创建会话记录，暂时不实际录制（跨平台考虑）
+			if session, err := ts.sessionService.Create(userID, server.ID, ipAddress, ""); err != nil {
 				log.Printf("Failed to create session record: %v", err)
+			} else {
+				// 保存数据库会话ID到进程信息中
+				process.DBSessionID = session.ID
+				log.Printf("Session record created: %s (recording disabled for cross-platform compatibility)", session.ID)
+
+				// TODO: 后续可以实现应用层录制功能
+				// 通过监听WebSocket数据流来录制终端会话
+				// 创建占位录制文件
+				if recordingFilePath != "" {
+					go ts.createPlaceholderRecording(recordingFilePath, sessionID)
+				}
 			}
 		}()
 	}
@@ -316,6 +329,15 @@ func (ts *TTYDService) StopTTYDSession(sessionID string) error {
 		go func() {
 			if err := ts.auditService.LogTerminalEnd(context.Background(), sessionID, "manual_stop"); err != nil {
 				log.Printf("Failed to log terminal end audit: %v", err)
+			}
+		}()
+	}
+
+	// 更新数据库中的会话状态
+	if ts.sessionService != nil && process.DBSessionID != "" {
+		go func() {
+			if err := ts.sessionService.Close(process.DBSessionID); err != nil {
+				log.Printf("Failed to close session in database: %v", err)
 			}
 		}()
 	}
@@ -463,6 +485,15 @@ func (ts *TTYDService) monitorProcess(process *TTYDProcess, cmd *exec.Cmd) {
 			}()
 		}
 
+		// 更新数据库中的会话状态
+		if ts.sessionService != nil && process.DBSessionID != "" {
+			go func() {
+				if err := ts.sessionService.Close(process.DBSessionID); err != nil {
+					log.Printf("Failed to close session in database: %v", err)
+				}
+			}()
+		}
+
 		ts.cleanupTempFiles(process.SessionID)
 		delete(ts.processes, process.SessionID)
 	}
@@ -488,5 +519,97 @@ func (ts *TTYDService) waitForPort(ctx context.Context, port int, timeout time.D
 				return true
 			}
 		}
+	}
+}
+
+// CleanupRecordings 清理录制文件
+func (ts *TTYDService) CleanupRecordings(maxAge time.Duration) {
+	recordingsDir := ts.recordingsDir
+
+	// 遍历录制目录
+	files, err := os.ReadDir(recordingsDir)
+	if err != nil {
+		log.Printf("Failed to read recordings directory: %v", err)
+		return
+	}
+
+	now := time.Now()
+	cleanedCount := 0
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		// 检查文件扩展名
+		if !strings.HasSuffix(file.Name(), ".cast") {
+			continue
+		}
+
+		filePath := filepath.Join(recordingsDir, file.Name())
+		fileInfo, err := file.Info()
+		if err != nil {
+			log.Printf("Failed to get file info for %s: %v", filePath, err)
+			continue
+		}
+
+		// 检查文件年龄
+		if now.Sub(fileInfo.ModTime()) > maxAge {
+			if err := os.Remove(filePath); err != nil {
+				log.Printf("Failed to remove old recording file %s: %v", filePath, err)
+			} else {
+				log.Printf("Removed old recording file: %s", filePath)
+				cleanedCount++
+			}
+		}
+	}
+
+	if cleanedCount > 0 {
+		log.Printf("Cleaned up %d old recording files", cleanedCount)
+	}
+}
+
+// GetRecordingsInfo 获取录制文件统计信息
+func (ts *TTYDService) GetRecordingsInfo() (int, int64, error) {
+	recordingsDir := ts.recordingsDir
+
+	files, err := os.ReadDir(recordingsDir)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	fileCount := 0
+	var totalSize int64
+
+	for _, file := range files {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".cast") {
+			continue
+		}
+
+		fileInfo, err := file.Info()
+		if err != nil {
+			continue
+		}
+
+		fileCount++
+		totalSize += fileInfo.Size()
+	}
+
+	return fileCount, totalSize, nil
+}
+
+// createPlaceholderRecording 创建占位录制文件
+func (ts *TTYDService) createPlaceholderRecording(recordingPath, sessionID string) {
+	// 创建一个简单的占位文件，说明录制功能待实现
+	placeholder := fmt.Sprintf(`{"version": 2, "width": 80, "height": 24, "timestamp": %d}
+[0, "o", "Recording functionality is disabled for cross-platform compatibility.\r\n"]
+[1, "o", "Session ID: %s\r\n"]
+[2, "o", "Future implementation will capture terminal sessions via WebSocket monitoring.\r\n"]
+`, time.Now().Unix(), sessionID)
+
+	if err := os.WriteFile(recordingPath, []byte(placeholder), 0644); err != nil {
+		log.Printf("Failed to create placeholder recording file: %v", err)
+	} else {
+		log.Printf("Created placeholder recording file: %s", recordingPath)
 	}
 }

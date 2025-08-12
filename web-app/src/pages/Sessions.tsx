@@ -16,12 +16,15 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { sessionAPI } from '../services/api';
 import { useAppStore } from '../stores/appStore';
+import SessionReplay from '../components/SessionReplay';
 import type { Session } from '../types';
 
 const { Title } = Typography;
 
 const Sessions: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [replayVisible, setReplayVisible] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
   const { sessions, setSessions } = useAppStore();
 
   const fetchSessions = async () => {
@@ -50,9 +53,14 @@ const Sessions: React.FC = () => {
     }
   };
 
-  const handleViewSession = (_sessionId: string) => {
-    // TODO: 实现会话回放功能
-    message.info('会话回放功能开发中...');
+  const handleViewSession = (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    setReplayVisible(true);
+  };
+
+  const handleCloseReplay = () => {
+    setReplayVisible(false);
+    setSelectedSessionId('');
   };
 
   const columns: ColumnsType<Session> = [
@@ -168,6 +176,12 @@ const Sessions: React.FC = () => {
           scroll={{ x: 1000 }}
         />
       </Card>
+
+      <SessionReplay
+        sessionId={selectedSessionId}
+        visible={replayVisible}
+        onClose={handleCloseReplay}
+      />
     </div>
   );
 };

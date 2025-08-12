@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"very-jump/internal/api"
 	"very-jump/internal/config"
@@ -80,7 +81,8 @@ func (s *Server) setupRoutes() {
 	authHandler := api.NewAuthHandler(authService)
 	serverHandler := api.NewServerHandler(serverService)
 	userHandler := api.NewUserHandler(userService)
-	sessionHandler := api.NewSessionHandler(sessionService)
+	recordingsDir := filepath.Join(s.cfg.DataDir, "recordings")
+	sessionHandler := api.NewSessionHandler(sessionService, recordingsDir, s.ttydService)
 	statsHandler := api.NewStatsHandler(serverService, userService, s.auditService)
 	// auditLogHandler := api.NewAuditLogHandler(auditLogService)
 	terminalHandler := api.NewTerminalHandler(s.ttydService, serverService)

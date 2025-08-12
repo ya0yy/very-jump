@@ -163,3 +163,10 @@ func (s *SessionService) GetActiveSessions() (int, error) {
 	err := s.db.QueryRow(query).Scan(&count)
 	return count, err
 }
+
+// UpdateRecordingFile 更新会话录制文件路径
+func (s *SessionService) UpdateRecordingFile(id, recordingFile string) error {
+	query := `UPDATE sessions SET recording_file = ? WHERE id = ?`
+	_, err := s.db.Exec(query, recordingFile, id)
+	return err
+}

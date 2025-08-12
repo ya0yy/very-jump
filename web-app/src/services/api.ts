@@ -112,6 +112,22 @@ export const sessionAPI = {
     const response = await api.get('/sessions/active');
     return response.data;
   },
+
+  getReplayInfo: async (id: string): Promise<{ 
+    session: Session;
+    has_recording: boolean; 
+    recording_size: number; 
+  }> => {
+    const response = await api.get(`/sessions/${id}/replay-info`);
+    return response.data;
+  },
+
+  getRecordingFile: async (id: string): Promise<Blob> => {
+    const response = await api.get(`/sessions/${id}/replay`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
 };
 
 // 用户管理 API (管理员)

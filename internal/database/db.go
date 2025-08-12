@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"log"
 	_ "modernc.org/sqlite"
-	
+	"strings"
 )
 
 // Init 初始化数据库
@@ -36,16 +36,20 @@ func runMigrations(db *sql.DB) error {
 		createUserServerPermissionsTable,
 		createSessionsTable,
 		createAuditLogsTable,
-		alterAuditLogsAddSuccessColumn, // 添加 success 列
-		createExtraAuditTables,         // 新的审计表
+		createExtraAuditTables, // 新的审计表
 		insertDefaultAdmin,
 	}
 
 	for _, migration := range migrations {
 		if _, err := db.Exec(migration); err != nil {
-			// Ignore "duplicate column name" error
+			// Ignore "duplicate column name" error for ALTER TABLE operations
 			if strings.Contains(err.Error(), "duplicate column name") {
-				log.Printf("Ignoring duplicate column error: %v", err)
+				log.Printf("Column already exists, skipping: %v", err) // 可选：注释掉减少日志
+				continue
+			}
+			// Ignore "table already exists" error for CREATE TABLE operations
+			if strings.Contains(err.Error(), "already exists") {
+				log.Printf("Table already exists, skipping: %v", err)
 				continue
 			}
 			return err
@@ -121,12 +125,14 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     ip_address VARCHAR(45),
     user_agent TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    success BOOLEAN DEFAULT TRUE,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 `
 
 const alterAuditLogsAddSuccessColumn = `
--- Add success column to audit_logs table
+-- Add success column to audit_logs table if it doesn't exist
+-- Use a more robust approach for column addition
 ALTER TABLE audit_logs ADD COLUMN success BOOLEAN DEFAULT TRUE;
 `
 
