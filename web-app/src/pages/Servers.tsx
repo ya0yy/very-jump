@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card,
-  Row,
-  Col,
+  Table,
   Button,
   Typography,
   Space,
@@ -15,13 +13,14 @@ import {
   Popconfirm,
   Tag,
   Tooltip,
+  Row,
+  Col,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   LinkOutlined,
-  DatabaseOutlined,
 } from '@ant-design/icons';
 import { serverAPI } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
@@ -120,7 +119,64 @@ const Servers: React.FC = () => {
     window.open(terminalUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
   };
 
-
+  const columns = [
+    {
+      title: '服务器名称',
+      dataIndex: 'name',
+      key: 'name',
+    },
+    {
+      title: '地址',
+      dataIndex: 'host',
+      key: 'host',
+      render: (_text: string, record: Server) => (
+        <Typography.Text code>{record.host}:{record.port}</Typography.Text>
+      ),
+    },
+    {
+      title: '用户',
+      dataIndex: 'username',
+      key: 'username',
+    },
+    {
+      title: '认证方式',
+      dataIndex: 'auth_type',
+      key: 'auth_type',
+      render: (authType: string) => (
+        <Tag color={authType === 'password' ? 'blue' : 'green'}>
+          {authType === 'password' ? '密码' : '密钥'}
+        </Tag>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_text: string, record: Server) => (
+        <Space size="middle">
+          <Button type="primary" onClick={() => handleConnectServer(record)} icon={<LinkOutlined />}>
+            连接
+          </Button>
+          {user?.role === 'admin' && (
+            <>
+              <Tooltip title="编辑">
+                <Button icon={<EditOutlined />} onClick={() => handleEditServer(record)} />
+              </Tooltip>
+              <Popconfirm
+                title="确定要删除这个服务器吗？"
+                onConfirm={() => handleDeleteServer(record.id)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Tooltip title="删除">
+                  <Button danger icon={<DeleteOutlined />} />
+                </Tooltip>
+              </Popconfirm>
+            </>
+          )}
+        </Space>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -139,100 +195,12 @@ const Servers: React.FC = () => {
         )}
       </div>
 
-      <Row gutter={[16, 16]}>
-        {servers.map((server) => (
-          <Col xs={24} sm={12} lg={8} xl={6} key={server.id}>
-            <Card
-              title={
-                <Space>
-                  <DatabaseOutlined />
-                  <span>{server.name}</span>
-                </Space>
-              }
-              extra={
-                user?.role === 'admin' && (
-                  <Space>
-                    <Tooltip title="编辑">
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() => handleEditServer(server)}
-                      />
-                    </Tooltip>
-                    <Popconfirm
-                      title="确定要删除这个服务器吗？"
-                      onConfirm={() => handleDeleteServer(server.id)}
-                      okText="确定"
-                      cancelText="取消"
-                    >
-                      <Tooltip title="删除">
-                        <Button
-                          type="text"
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                        />
-                      </Tooltip>
-                    </Popconfirm>
-                  </Space>
-                )
-              }
-              actions={[
-                <Button
-                  key="connect"
-                  type="primary"
-                  icon={<LinkOutlined />}
-                  onClick={() => handleConnectServer(server)}
-                >
-                  连接
-                </Button>
-              ]}
-            >
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <div>
-                  <Typography.Text strong>地址：</Typography.Text>
-                  <Typography.Text code>{server.host}:{server.port}</Typography.Text>
-                </div>
-                <div>
-                  <Typography.Text strong>用户：</Typography.Text>
-                  <Typography.Text>{server.username}</Typography.Text>
-                </div>
-                <div>
-                  <Typography.Text strong>认证：</Typography.Text>
-                  <Tag color={server.auth_type === 'password' ? 'blue' : 'green'}>
-                    {server.auth_type === 'password' ? '密码' : '密钥'}
-                  </Tag>
-                </div>
-                {server.description && (
-                  <div>
-                    <Typography.Text strong>描述：</Typography.Text>
-                    <Typography.Text type="secondary">{server.description}</Typography.Text>
-                  </div>
-                )}
-              </Space>
-            </Card>
-          </Col>
-        ))}
-
-        {servers.length === 0 && !loading && (
-          <Col span={24}>
-            <Card style={{ textAlign: 'center', padding: '40px 0' }}>
-              <Space direction="vertical">
-                <DatabaseOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
-                <Typography.Text type="secondary">
-                  暂无服务器
-                </Typography.Text>
-                {user?.role === 'admin' && (
-                  <Button type="primary" onClick={handleAddServer}>
-                    添加第一台服务器
-                  </Button>
-                )}
-              </Space>
-            </Card>
-          </Col>
-        )}
-      </Row>
+      <Table
+        columns={columns}
+        dataSource={servers}
+        loading={loading}
+        rowKey="id"
+      />
 
       <Modal
         title={editingServer ? '编辑服务器' : '添加服务器'}
@@ -349,8 +317,6 @@ const Servers: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-
-
     </div>
   );
 };

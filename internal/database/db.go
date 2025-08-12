@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	_ "modernc.org/sqlite"
+	
 )
 
 // Init 初始化数据库
@@ -35,12 +36,18 @@ func runMigrations(db *sql.DB) error {
 		createUserServerPermissionsTable,
 		createSessionsTable,
 		createAuditLogsTable,
-		createNewAuditTables, // 新的审计表
+		alterAuditLogsAddSuccessColumn, // 添加 success 列
+		createExtraAuditTables,         // 新的审计表
 		insertDefaultAdmin,
 	}
 
 	for _, migration := range migrations {
 		if _, err := db.Exec(migration); err != nil {
+			// Ignore "duplicate column name" error
+			if strings.Contains(err.Error(), "duplicate column name") {
+				log.Printf("Ignoring duplicate column error: %v", err)
+				continue
+			}
 			return err
 		}
 	}
@@ -118,24 +125,12 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 `
 
-const createNewAuditTables = `
--- 更新审计日志表结构
-CREATE TABLE IF NOT EXISTS new_audit_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    server_id INTEGER,
-    action TEXT NOT NULL,
-    details TEXT,
-    session_id TEXT,
-    ip_address TEXT,
-    user_agent TEXT,
-    success BOOLEAN DEFAULT TRUE,
-    error_msg TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (server_id) REFERENCES servers(id)
-);
+const alterAuditLogsAddSuccessColumn = `
+-- Add success column to audit_logs table
+ALTER TABLE audit_logs ADD COLUMN success BOOLEAN DEFAULT TRUE;
+`
 
+const createExtraAuditTables = `
 -- 终端会话统计表
 CREATE TABLE IF NOT EXISTS terminal_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,9 +170,9 @@ CREATE TABLE IF NOT EXISTS security_alerts (
 );
 
 -- 创建索引
-CREATE INDEX IF NOT EXISTS idx_new_audit_logs_user_id ON new_audit_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_new_audit_logs_action ON new_audit_logs(action);
-CREATE INDEX IF NOT EXISTS idx_new_audit_logs_created_at ON new_audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_terminal_sessions_user_id ON terminal_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_terminal_sessions_status ON terminal_sessions(status);
 CREATE INDEX IF NOT EXISTS idx_security_alerts_resolved ON security_alerts(resolved);

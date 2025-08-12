@@ -31,8 +31,11 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	// 初始化审计服务
 	auditService := services.NewAuditService(db)
 
+	// 初始化会话服务
+	sessionService := models.NewSessionService(db)
+
 	// 初始化ttyd服务
-	ttydService := services.NewTTYDService(cfg.DataDir, auditService)
+	ttydService := services.NewTTYDService(cfg.DataDir, auditService, sessionService)
 
 	return &Server{
 		cfg:          cfg,
@@ -78,9 +81,10 @@ func (s *Server) setupRoutes() {
 	serverHandler := api.NewServerHandler(serverService)
 	userHandler := api.NewUserHandler(userService)
 	sessionHandler := api.NewSessionHandler(sessionService)
+	statsHandler := api.NewStatsHandler(serverService, userService, s.auditService)
 	// auditLogHandler := api.NewAuditLogHandler(auditLogService)
 	terminalHandler := api.NewTerminalHandler(s.ttydService, serverService)
-	auditHandler := api.NewAuditHandler(s.auditService)
+	auditHandler := api.NewAuditHandler(s.auditService, s.ttydService)
 
 	// API 路由
 	apiV1 := s.router.Group("/api/v1")
@@ -134,6 +138,9 @@ func (s *Server) setupRoutes() {
 				admin.GET("/users/:id", userHandler.Get)
 				admin.PUT("/users/:id", userHandler.Update)
 				admin.DELETE("/users/:id", userHandler.Delete)
+
+				// 系统统计
+				admin.GET("/stats", statsHandler.GetStats)
 			}
 		}
 

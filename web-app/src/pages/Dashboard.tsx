@@ -1,13 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Typography, Space, Alert } from 'antd';
+import {
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Typography,
+  Space,
+  Alert,
+} from 'antd';
 import {
   DatabaseOutlined,
   HistoryOutlined,
   UserOutlined,
   LinkOutlined,
 } from '@ant-design/icons';
-import { sessionAPI, serverAPI } from '../services/api';
+import { systemAPI, serverAPI } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import ServerCard from '../components/ServerCard';
+import type { Server } from '../types';
 
 const { Title } = Typography;
 
@@ -20,45 +30,42 @@ interface DashboardStats {
 
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuthStore();
 
+  const fetchDashboardData = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const [statsData, serversData] = await Promise.all([
+        systemAPI.getStats(),
+        serverAPI.getServers(),
+      ]);
+
+      setStats(statsData);
+      setServers(serversData.servers);
+    } catch (err: any) {
+      setError('加载仪表板数据失败');
+      console.error('Dashboard data fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      // 确保用户已认证再加载数据
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        
-        // 获取基础统计数据
-        const [serversData, activeSessionsData] = await Promise.all([
-          serverAPI.getServers(),
-          sessionAPI.getActiveSessions(),
-        ]);
-
-        const dashboardStats: DashboardStats = {
-          total_servers: serversData.servers.length,
-          active_sessions: activeSessionsData.active_sessions,
-          total_users: 0, // 将从用户API获取
-          total_sessions: 0, // 将从会话API获取
-        };
-
-        setStats(dashboardStats);
-      } catch (err: any) {
-        setError('加载仪表板数据失败');
-        console.error('Dashboard data fetch error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboardData();
-  }, [user]); // 依赖user变化
+  }, [user]);
+
+  const handleConnectServer = (server: Server) => {
+    const terminalUrl = `/terminal/${server.id}`;
+    window.open(terminalUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+  };
 
   if (error) {
     return (
@@ -132,6 +139,20 @@ const Dashboard: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      <div style={{ marginTop: 24 }}>
+        <Title level={3}>快捷连接</Title>
+        <Row gutter={[16, 16]}>
+          {servers.slice(0, 6).map((server) => (
+            <Col xs={24} sm={12} lg={8} xl={6} key={server.id}>
+              <ServerCard
+                server={server}
+                onConnect={handleConnectServer}
+              />
+            </Col>
+          ))}
+        </Row>
+      </div>
 
       <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
         <Col xs={24} lg={12}>

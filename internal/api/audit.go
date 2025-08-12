@@ -12,12 +12,14 @@ import (
 // AuditHandler 审计API处理器
 type AuditHandler struct {
 	auditService *services.AuditService
+	ttydService  *services.TTYDService
 }
 
 // NewAuditHandler 创建审计处理器实例
-func NewAuditHandler(auditService *services.AuditService) *AuditHandler {
+func NewAuditHandler(auditService *services.AuditService, ttydService *services.TTYDService) *AuditHandler {
 	return &AuditHandler{
 		auditService: auditService,
+		ttydService:  ttydService,
 	}
 }
 
@@ -182,14 +184,53 @@ func (h *AuditHandler) GetTerminalSessions(c *gin.Context) {
 	userID := int(user["id"].(float64))
 	role := user["role"].(string)
 
-	// TODO: 实现获取终端会话列表的逻辑
-	// 普通用户只能查看自己的会话，管理员可以查看所有会话
+	// 从ttyd服务获取所有活跃的会话
+	allSessions := h.ttydService.ListActiveSessions()
+
+	var userSessions []*services.TTYDProcess
+	if role == "admin" {
+		// 管理员可以查看所有会话
+		userSessions = allSessions
+	} else {
+		// 普通用户只能查看自己的会话
+		for _, s := range allSessions {
+			if s.UserID == userID {
+				userSessions = append(userSessions, s)
+			}
+		}
+	}
+
+	// 分页处理
+	total := len(userSessions)
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	paginatedSessions := userSessions[start:end]
+
+	// 格式化输出
+	responseSessions := make([]gin.H, len(paginatedSessions))
+	for i, s := range paginatedSessions {
+		responseSessions[i] = gin.H{
+			"session_id": s.SessionID,
+			"user_id":    s.UserID,
+			"server_id":  s.ServerID,
+			"username":   s.Username,
+			"server":     s.ServerName,
+			"start_time": s.CreatedAt,
+			"status":     "active",
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"sessions":  []interface{}{}, // 暂时返回空数组
+		"sessions":  responseSessions,
+		"total":     total,
 		"page":      page,
 		"page_size": pageSize,
-		"user_id":   userID,
-		"role":      role,
 	})
 }

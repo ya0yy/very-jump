@@ -69,32 +69,35 @@ expect {
 
 // TTYDService ttyd服务
 type TTYDService struct {
-	dataDir      string
-	processes    map[string]*TTYDProcess // key: sessionID, value: ttyd进程信息
-	mutex        sync.RWMutex
-	basePort     int           // 基础端口号，从7681开始
-	auditService *AuditService // 审计服务
+	dataDir        string
+	processes      map[string]*TTYDProcess // key: sessionID, value: ttyd进程信息
+	mutex          sync.RWMutex
+	basePort       int // 基础端口号，从7681开始
+	auditService   *AuditService // 审计服务
+	sessionService *models.SessionService
 }
 
 // TTYDProcess ttyd进程信息
 type TTYDProcess struct {
-	SessionID string
-	UserID    int
-	Username  string
-	ServerID  int
-	Port      int
-	Process   *os.Process
-	Cancel    context.CancelFunc
-	CreatedAt time.Time
+	SessionID  string
+	UserID     int
+	Username   string
+	ServerID   int
+	ServerName string // 添加服务器名称字段
+	Port       int
+	Process    *os.Process
+	Cancel     context.CancelFunc
+	CreatedAt  time.Time
 }
 
 // NewTTYDService 创建ttyd服务
-func NewTTYDService(dataDir string, auditService *AuditService) *TTYDService {
+func NewTTYDService(dataDir string, auditService *AuditService, sessionService *models.SessionService) *TTYDService {
 	return &TTYDService{
-		dataDir:      dataDir,
-		processes:    make(map[string]*TTYDProcess),
-		basePort:     7681,
-		auditService: auditService,
+		dataDir:        dataDir,
+		processes:      make(map[string]*TTYDProcess),
+		basePort:       7681,
+		auditService:   auditService,
+		sessionService: sessionService,
 	}
 }
 
@@ -231,14 +234,15 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 
 	// 创建进程信息
 	process := &TTYDProcess{
-		SessionID: sessionID,
-		UserID:    userID,
-		Username:  username,
-		ServerID:  server.ID,
-		Port:      port,
-		Process:   cmd.Process,
-		Cancel:    cancel,
-		CreatedAt: time.Now(),
+		SessionID:  sessionID,
+		UserID:     userID,
+		Username:   username,
+		ServerID:   server.ID,
+		ServerName: server.Name, // 填充服务器名称
+		Port:       port,
+		Process:    cmd.Process,
+		Cancel:     cancel,
+		CreatedAt:  time.Now(),
 	}
 
 	// 保存进程信息
@@ -252,6 +256,17 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 		go func() {
 			if err := ts.auditService.LogTerminalStart(context.Background(), userID, server.ID, sessionID, ipAddress, userAgent); err != nil {
 				log.Printf("Failed to log terminal start: %v", err)
+			}
+		}()
+	}
+
+	// 创建历史会话记录
+	if ts.sessionService != nil {
+		go func() {
+			// 将来可以实现会话录制功能，并将文件路径保存在这里
+			recordingFile := ""
+			if _, err := ts.sessionService.Create(userID, server.ID, ipAddress, recordingFile); err != nil {
+				log.Printf("Failed to create session record: %v", err)
 			}
 		}()
 	}
@@ -365,6 +380,7 @@ func (ts *TTYDService) findAvailablePort() int {
 		}
 		// 端口可用，关闭监听器并返回端口
 		listener.Close()
+		ts.basePort = port + 1 // 更新基础端口，以便下次从新位置开始查找
 		return port
 	}
 }
@@ -433,6 +449,20 @@ func (ts *TTYDService) monitorProcess(process *TTYDProcess, cmd *exec.Cmd) {
 	// 清理进程信息
 	if _, exists := ts.processes[process.SessionID]; exists {
 		log.Printf("ttyd进程结束: sessionID=%s, error=%v", process.SessionID, err)
+
+		// 记录终端结束
+		reason := "ended"
+		if err != nil {
+			reason = "error"
+		}
+		if ts.auditService != nil {
+			go func() {
+				if err := ts.auditService.LogTerminalEnd(context.Background(), process.SessionID, reason); err != nil {
+					log.Printf("Failed to log terminal end audit: %v", err)
+				}
+			}()
+		}
+
 		ts.cleanupTempFiles(process.SessionID)
 		delete(ts.processes, process.SessionID)
 	}

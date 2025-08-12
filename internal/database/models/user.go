@@ -160,3 +160,14 @@ func (u *User) ValidatePassword(password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
 	return err == nil
 }
+
+// GetUserCount 获取用户总数
+func (s *UserService) GetUserCount() (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM users`
+	err := s.db.QueryRow(query).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}

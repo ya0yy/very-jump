@@ -205,3 +205,14 @@ func (s *ServerService) Delete(id int) error {
 	_, err := s.db.Exec(query, id)
 	return err
 }
+
+// GetServerCount 获取服务器总数
+func (s *ServerService) GetServerCount() (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM servers`
+	err := s.db.QueryRow(query).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
