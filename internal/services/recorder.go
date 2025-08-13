@@ -99,6 +99,31 @@ func (r *SessionRecorder) WriteOutput(data []byte) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
+	// 处理ttyd消息格式，剥离消息类型前缀
+	var outputData string
+	if len(data) > 0 {
+		// ttyd消息格式：第一个字符是消息类型，'0'=OUTPUT, '1'=SET_WINDOW_TITLE, '2'=SET_PREFERENCES
+		switch data[0] {
+		case '0': // OUTPUT - 终端输出数据
+			if len(data) > 1 {
+				outputData = string(data[1:]) // 去除'0'前缀
+			}
+		case '1': // SET_WINDOW_TITLE - 忽略窗口标题设置
+			return nil
+		case '2': // SET_PREFERENCES - 忽略偏好设置
+			return nil
+		default: // 其他情况，直接记录原始数据
+			outputData = string(data)
+		}
+	} else {
+		return nil
+	}
+
+	// 如果没有实际输出数据，不记录
+	if outputData == "" {
+		return nil
+	}
+
 	// 计算相对时间戳
 	elapsed := time.Since(r.startTime).Seconds()
 
@@ -106,7 +131,7 @@ func (r *SessionRecorder) WriteOutput(data []byte) error {
 	event := []interface{}{
 		elapsed,
 		"o", // output
-		string(data),
+		outputData,
 	}
 
 	eventBytes, err := json.Marshal(event)
@@ -130,6 +155,29 @@ func (r *SessionRecorder) WriteInput(data []byte) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
+	// 处理ttyd消息格式，剥离消息类型前缀
+	var inputData string
+	if len(data) > 0 {
+		// ttyd客户端输入消息格式：'0'=INPUT, '1'=RESIZE_TERMINAL
+		switch data[0] {
+		case '0': // INPUT - 用户输入数据
+			if len(data) > 1 {
+				inputData = string(data[1:]) // 去除'0'前缀
+			}
+		case '1': // RESIZE_TERMINAL - 忽略终端大小调整
+			return nil
+		default: // 其他情况，直接记录原始数据
+			inputData = string(data)
+		}
+	} else {
+		return nil
+	}
+
+	// 如果没有实际输入数据，不记录
+	if inputData == "" {
+		return nil
+	}
+
 	// 计算相对时间戳
 	elapsed := time.Since(r.startTime).Seconds()
 
@@ -137,7 +185,7 @@ func (r *SessionRecorder) WriteInput(data []byte) error {
 	event := []interface{}{
 		elapsed,
 		"i", // input
-		string(data),
+		inputData,
 	}
 
 	eventBytes, err := json.Marshal(event)

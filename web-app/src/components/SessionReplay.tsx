@@ -3,6 +3,7 @@ import { Modal, message, Button, Space, Slider, Typography, Card } from 'antd';
 import { PlayCircleOutlined, PauseCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { sessionAPI } from '../services/api';
 import type { Session } from '../types';
+import Convert from 'ansi-to-html';
 
 const { Text } = Typography;
 
@@ -42,8 +43,20 @@ const SessionReplay: React.FC<SessionReplayProps> = ({ sessionId, visible, onClo
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const playStartTimeRef = useRef<number>(0);
   const pausedAtRef = useRef<number>(0);
+  const convertRef = useRef<Convert | null>(null);
 
   useEffect(() => {
+    // 初始化ANSI转换器
+    if (!convertRef.current) {
+      convertRef.current = new Convert({
+        fg: '#FFF',
+        bg: '#000',
+        newline: false,
+        escapeXML: false,
+        stream: false
+      });
+    }
+    
     if (visible && sessionId) {
       fetchReplayInfo();
     }
@@ -81,7 +94,7 @@ const SessionReplay: React.FC<SessionReplayProps> = ({ sessionId, visible, onClo
       
       // 解析 asciinema 格式
       const lines = text.trim().split('\n');
-      const header = JSON.parse(lines[0]) as AsciinemaRecord;
+      JSON.parse(lines[0]) as AsciinemaRecord; // header info
       const events: AsciinemaEvent[] = [];
       
       for (let i = 1; i < lines.length; i++) {
@@ -108,23 +121,38 @@ const SessionReplay: React.FC<SessionReplayProps> = ({ sessionId, visible, onClo
   };
 
   const renderTerminalOutput = (upToTime: number) => {
-    if (!recordingData || !terminalRef.current) return;
+    if (!recordingData || !terminalRef.current || !convertRef.current) return;
     
     let output = '';
     for (const event of recordingData) {
       if (event.time <= upToTime && event.type === 'o') {
-        output += event.data;
+        let eventData = event.data;
+        
+        // 处理ttyd消息格式，剥离消息类型前缀（兼容旧录制文件）
+        if (eventData.length > 0) {
+          const firstChar = eventData.charAt(0);
+          if (firstChar === '0') {
+            // '0' = OUTPUT，去除前缀
+            eventData = eventData.substring(1);
+          } else if (firstChar === '1' || firstChar === '2') {
+            // '1' = SET_WINDOW_TITLE, '2' = SET_PREFERENCES，忽略这些消息
+            continue;
+          }
+        }
+        
+        output += eventData;
       }
     }
     
-    // 简单的终端输出渲染
-    terminalRef.current.innerHTML = `<pre style="margin: 0; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.4;">${escapeHtml(output)}</pre>`;
-  };
-
-  const escapeHtml = (text: string) => {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    // 清理OSC (Operating System Command) 转义序列，特别是窗口标题设置
+    // 格式: ESC ] 0 ; title BEL 或 ESC ] 0 ; title ESC \
+    output = output.replace(/\x1b\]0;[^\x07\x1b]*[\x07\x1b\\]/g, '');
+    // 还要处理其他OSC序列: ESC ] number ; data BEL/ST
+    output = output.replace(/\x1b\]\d+;[^\x07\x1b]*[\x07\x1b\\]/g, '');
+    
+    // 使用ansi-to-html处理ANSI转义序列
+    const htmlOutput = convertRef.current.toHtml(output);
+    terminalRef.current.innerHTML = `<pre style="margin: 0; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.4;">${htmlOutput}</pre>`;
   };
 
   const play = () => {

@@ -117,6 +117,8 @@ func (s *Server) setupRoutes() {
 				sessions.GET("/:id", sessionHandler.Get)
 				sessions.POST("/:id/close", sessionHandler.Close)
 				sessions.GET("/active", sessionHandler.GetActiveSessions)
+				sessions.GET("/:id/replay-info", sessionHandler.GetReplayInfo)
+				sessions.GET("/:id/replay", sessionHandler.Replay)
 			}
 
 			// 审计日志 (旧版，保留兼容性)
