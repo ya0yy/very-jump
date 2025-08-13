@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"very-jump/internal/database/models"
+	"very-jump/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,6 +25,8 @@ type SessionHandler struct {
 type TTYDServiceInterface interface {
 	GetRecordingsInfo() (int, int64, error)
 	CleanupRecordings(maxAge time.Duration)
+	GetTTYDProcess(sessionID string) (*services.TTYDProcess, bool)
+	StopTTYDSession(sessionID string) error
 }
 
 // NewSessionHandler 创建会话处理器
@@ -282,5 +285,88 @@ func (h *SessionHandler) CleanupOldRecordings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":      "录制文件清理完成",
 		"max_age_days": int(maxAge.Hours() / 24),
+	})
+}
+
+// Heartbeat 会话心跳更新
+func (h *SessionHandler) Heartbeat(c *gin.Context) {
+	id := c.Param("id")
+	userID, _ := c.Get("user_id")
+	role, _ := c.Get("role")
+
+	// 获取会话信息进行权限检查
+	session, err := h.sessionService.GetByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "会话不存在"})
+		return
+	}
+
+	// 非管理员只能更新自己的会话心跳
+	if role != "admin" && session.UserID != userID.(int) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "没有权限更新该会话"})
+		return
+	}
+
+	// 只有活跃会话才能更新心跳
+	if session.Status != "active" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只有活跃会话才能更新心跳"})
+		return
+	}
+
+	// 更新心跳时间
+	if err := h.sessionService.UpdateHeartbeat(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新心跳失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "心跳更新成功"})
+}
+
+// CleanupStaleSessions 清理超时会话 (管理员)
+func (h *SessionHandler) CleanupStaleSessions(c *gin.Context) {
+	role, _ := c.Get("role")
+
+	// 只有管理员可以手动清理会话
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "没有权限清理会话"})
+		return
+	}
+
+	// 默认30分钟超时
+	timeout := 30 * time.Minute
+	if minutes := c.Query("timeout_minutes"); minutes != "" {
+		if parsed, err := strconv.Atoi(minutes); err == nil && parsed > 0 {
+			timeout = time.Duration(parsed) * time.Minute
+		}
+	}
+
+	// 获取超时会话列表
+	staleSessions, err := h.sessionService.GetStaleActiveSessions(timeout)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取超时会话失败"})
+		return
+	}
+
+	// 清理超时会话
+	cleanedCount, err := h.sessionService.CleanupStaleActiveSessions(timeout)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "清理会话失败"})
+		return
+	}
+
+	// 同时清理TTYD进程
+	if h.ttydService != nil {
+		for _, session := range staleSessions {
+			// 通过会话ID查找TTYD进程并停止
+			if process, exists := h.ttydService.GetTTYDProcess(session.ID); exists {
+				h.ttydService.StopTTYDSession(process.SessionID)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "会话清理完成",
+		"cleaned_count":  cleanedCount,
+		"timeout_minutes": int(timeout.Minutes()),
 	})
 }

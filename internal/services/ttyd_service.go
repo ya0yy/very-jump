@@ -273,18 +273,17 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 		}()
 	}
 
-	// 创建历史会话记录
+	// 创建历史会话记录（同步执行，避免并发问题）
 	if ts.sessionService != nil {
-		go func() {
-			// 创建会话记录，保存录制文件名
-			if session, err := ts.sessionService.Create(userID, server.ID, ipAddress, recordingFileName); err != nil {
-				log.Printf("Failed to create session record: %v", err)
-			} else {
-				// 保存数据库会话ID到进程信息中
-				process.DBSessionID = session.ID
-				log.Printf("Session record created: %s, recording file: %s", session.ID, recordingFileName)
-			}
-		}()
+		// 稍后延迟创建，让主进程先完成启动
+		time.Sleep(100 * time.Millisecond)
+		if session, err := ts.sessionService.Create(userID, server.ID, ipAddress, recordingFileName); err != nil {
+			log.Printf("Failed to create session record: %v", err)
+		} else {
+			// 保存数据库会话ID到进程信息中
+			process.DBSessionID = session.ID
+			log.Printf("Session record created: %s, recording file: %s", session.ID, recordingFileName)
+		}
 	}
 
 	log.Printf("ttyd会话启动成功: sessionID=%s, port=%d", sessionID, port)

@@ -6,17 +6,16 @@ import (
 
 // AuditLog 审计日志模型
 type AuditLog struct {
-	ID        int       `json:"id" db:"id"`
-	UserID    int       `json:"user_id" db:"user_id"`
-	ServerID  int       `json:"server_id" db:"server_id"`
-	Action    string    `json:"action" db:"action"`         // 操作类型：terminal_start, terminal_stop, command_execute 等
-	Details   string    `json:"details" db:"details"`       // 操作详情 JSON
-	SessionID string    `json:"session_id" db:"session_id"` // 终端会话ID
-	IPAddress string    `json:"ip_address" db:"ip_address"` // 客户端IP
-	UserAgent string    `json:"user_agent" db:"user_agent"` // 客户端信息
-	Success   bool      `json:"success" db:"success"`       // 操作是否成功
-	ErrorMsg  string    `json:"error_msg" db:"error_msg"`   // 错误信息
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	ID           int       `json:"id" db:"id"`
+	UserID       int       `json:"user_id" db:"user_id"`
+	Action       string    `json:"action" db:"action"`                // 操作类型：terminal_start, terminal_stop, command_execute 等
+	ResourceType string    `json:"resource_type" db:"resource_type"`  // 资源类型
+	ResourceID   string    `json:"resource_id" db:"resource_id"`      // 资源ID
+	Details      string    `json:"details" db:"details"`              // 操作详情 JSON
+	IPAddress    string    `json:"ip_address" db:"ip_address"`        // 客户端IP
+	UserAgent    string    `json:"user_agent" db:"user_agent"`        // 客户端信息
+	Success      bool      `json:"success" db:"success"`              // 操作是否成功
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 }
 
 // TerminalSession 终端会话统计模型

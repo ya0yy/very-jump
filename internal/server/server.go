@@ -17,11 +17,12 @@ import (
 
 // Server HTTP 服务器
 type Server struct {
-	cfg          *config.Config
-	db           *sql.DB
-	router       *gin.Engine
-	ttydService  *services.TTYDService
-	auditService *services.AuditService
+	cfg            *config.Config
+	db             *sql.DB
+	router         *gin.Engine
+	ttydService    *services.TTYDService
+	auditService   *services.AuditService
+	sessionMonitor *services.SessionMonitor
 }
 
 // New 创建服务器
@@ -38,12 +39,16 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	// 初始化ttyd服务
 	ttydService := services.NewTTYDService(cfg.DataDir, auditService, sessionService)
 
+	// 初始化会话监控服务
+	sessionMonitor := services.NewSessionMonitor(sessionService, ttydService)
+
 	return &Server{
-		cfg:          cfg,
-		db:           db,
-		router:       router,
-		ttydService:  ttydService,
-		auditService: auditService,
+		cfg:            cfg,
+		db:             db,
+		router:         router,
+		ttydService:    ttydService,
+		auditService:   auditService,
+		sessionMonitor: sessionMonitor,
 	}
 }
 
@@ -52,8 +57,21 @@ func (s *Server) Start() error {
 	s.setupMiddleware()
 	s.setupRoutes()
 
+	// 启动会话监控服务
+	if err := s.sessionMonitor.Start(); err != nil {
+		log.Printf("Failed to start session monitor: %v", err)
+	}
+
 	log.Printf("Server starting on port %s", s.cfg.Port)
 	return s.router.Run(":" + s.cfg.Port)
+}
+
+// Stop 停止服务器
+func (s *Server) Stop() {
+	// 停止会话监控服务
+	if s.sessionMonitor != nil {
+		s.sessionMonitor.Stop()
+	}
 }
 
 // setupMiddleware 设置中间件
@@ -119,6 +137,7 @@ func (s *Server) setupRoutes() {
 				sessions.GET("/active", sessionHandler.GetActiveSessions)
 				sessions.GET("/:id/replay-info", sessionHandler.GetReplayInfo)
 				sessions.GET("/:id/replay", sessionHandler.Replay)
+				sessions.POST("/:id/heartbeat", sessionHandler.Heartbeat)
 			}
 
 			// 审计日志 (旧版，保留兼容性)
@@ -145,6 +164,9 @@ func (s *Server) setupRoutes() {
 
 				// 系统统计
 				admin.GET("/stats", statsHandler.GetStats)
+				
+				// 会话管理（管理员）
+				admin.POST("/sessions/cleanup", sessionHandler.CleanupStaleSessions)
 			}
 		}
 

@@ -25,12 +25,12 @@ func NewAuditService(db *sql.DB) *AuditService {
 // LogAction 记录操作审计日志
 func (s *AuditService) LogAction(ctx context.Context, log *models.AuditLog) error {
 	query := `
-		INSERT INTO audit_logs (user_id, server_id, action, details, session_id, ip_address, user_agent, success, error_msg)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, ip_address, user_agent, success)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	_, err := s.db.ExecContext(ctx, query,
-		log.UserID, log.ServerID, log.Action, log.Details, log.SessionID,
-		log.IPAddress, log.UserAgent, log.Success, log.ErrorMsg)
+		log.UserID, log.Action, log.ResourceType, log.ResourceID, log.Details,
+		log.IPAddress, log.UserAgent, log.Success)
 
 	if err != nil {
 		return fmt.Errorf("failed to insert audit log: %w", err)
@@ -42,19 +42,20 @@ func (s *AuditService) LogAction(ctx context.Context, log *models.AuditLog) erro
 func (s *AuditService) LogTerminalStart(ctx context.Context, userID, serverID int, sessionID, ipAddress, userAgent string) error {
 	details := map[string]interface{}{
 		"session_id": sessionID,
+		"server_id":  serverID,
 		"timestamp":  time.Now().UTC(),
 	}
 	detailsJSON, _ := json.Marshal(details)
 
 	auditLog := &models.AuditLog{
-		UserID:    userID,
-		ServerID:  serverID,
-		Action:    "terminal_start",
-		Details:   string(detailsJSON),
-		SessionID: sessionID,
-		IPAddress: ipAddress,
-		UserAgent: userAgent,
-		Success:   true,
+		UserID:       userID,
+		Action:       "terminal_start",
+		ResourceType: "terminal_session",
+		ResourceID:   sessionID,
+		Details:      string(detailsJSON),
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		Success:      true,
 	}
 
 	// 记录审计日志
@@ -90,13 +91,13 @@ func (s *AuditService) LogTerminalEnd(ctx context.Context, sessionID, reason str
 	detailsJSON, _ := json.Marshal(details)
 
 	auditLog := &models.AuditLog{
-		UserID:    session.UserID,
-		ServerID:  session.ServerID,
-		Action:    "terminal_end",
-		Details:   string(detailsJSON),
-		SessionID: sessionID,
-		IPAddress: session.IPAddress,
-		Success:   true,
+		UserID:       session.UserID,
+		Action:       "terminal_end",
+		ResourceType: "terminal_session",
+		ResourceID:   sessionID,
+		Details:      string(detailsJSON),
+		IPAddress:    session.IPAddress,
+		Success:      true,
 	}
 
 	return s.LogAction(ctx, auditLog)
@@ -243,8 +244,8 @@ func (s *AuditService) getSeverityForCommand(pattern string) string {
 // GetAuditLogs 获取审计日志列表
 func (s *AuditService) GetAuditLogs(ctx context.Context, userID *int, limit, offset int) ([]*models.AuditLog, error) {
 	query := `
-		SELECT id, user_id, server_id, action, details, session_id, ip_address, 
-		       user_agent, success, error_msg, created_at
+		SELECT id, user_id, action, resource_type, resource_id, details, ip_address, 
+		       user_agent, success, created_at
 		FROM audit_logs
 	`
 	args := []interface{}{}
@@ -267,9 +268,9 @@ func (s *AuditService) GetAuditLogs(ctx context.Context, userID *int, limit, off
 	for rows.Next() {
 		log := &models.AuditLog{}
 		err := rows.Scan(
-			&log.ID, &log.UserID, &log.ServerID, &log.Action, &log.Details,
-			&log.SessionID, &log.IPAddress, &log.UserAgent, &log.Success,
-			&log.ErrorMsg, &log.CreatedAt,
+			&log.ID, &log.UserID, &log.Action, &log.ResourceType, &log.ResourceID,
+			&log.Details, &log.IPAddress, &log.UserAgent, &log.Success,
+			&log.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan audit log: %w", err)
@@ -324,14 +325,14 @@ func (s *AuditService) GetSecurityAlerts(ctx context.Context, resolved *bool, li
 func (s *AuditService) GetAuditStatistics(ctx context.Context) (*models.AuditStatistics, error) {
 	stats := &models.AuditStatistics{}
 
-	// 总会话数
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM terminal_sessions").Scan(&stats.TotalSessions)
+	// 总会话数 - 使用实际的sessions表
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sessions").Scan(&stats.TotalSessions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total sessions: %w", err)
 	}
 
-	// 活跃会话数
-	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM terminal_sessions WHERE status = 'active'").Scan(&stats.ActiveSessions)
+	// 活跃会话数 - 使用实际的sessions表而不是terminal_sessions审计表
+	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sessions WHERE status = 'active'").Scan(&stats.ActiveSessions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active sessions: %w", err)
 	}

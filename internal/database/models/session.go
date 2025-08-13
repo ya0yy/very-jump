@@ -17,8 +17,9 @@ type Session struct {
 	Status        string     `json:"status" db:"status"`
 	ClientIP      string     `json:"client_ip" db:"client_ip"`
 	RecordingFile string     `json:"recording_file" db:"recording_file"`
-	Username      string     `json:"username,omitempty"`    // 关联查询时使用
-	ServerName    string     `json:"server_name,omitempty"` // 关联查询时使用
+	LastHeartbeat *time.Time `json:"last_heartbeat" db:"last_heartbeat"` // 最后心跳时间
+	Username      string     `json:"username,omitempty"`                 // 关联查询时使用
+	ServerName    string     `json:"server_name,omitempty"`              // 关联查询时使用
 }
 
 // SessionService 会话服务
@@ -57,7 +58,7 @@ func (s *SessionService) Create(userID, serverID int, clientIP, recordingFile st
 func (s *SessionService) GetByID(id string) (*Session, error) {
 	query := `
 		SELECT s.id, s.user_id, s.server_id, s.start_time, s.end_time, s.status, 
-		       s.client_ip, s.recording_file, u.username, srv.name as server_name
+		       s.client_ip, s.recording_file, s.last_heartbeat, u.username, srv.name as server_name
 		FROM sessions s
 		LEFT JOIN users u ON s.user_id = u.id
 		LEFT JOIN servers srv ON s.server_id = srv.id
@@ -68,7 +69,7 @@ func (s *SessionService) GetByID(id string) (*Session, error) {
 	err := s.db.QueryRow(query, id).Scan(
 		&session.ID, &session.UserID, &session.ServerID, &session.StartTime,
 		&session.EndTime, &session.Status, &session.ClientIP, &session.RecordingFile,
-		&session.Username, &session.ServerName,
+		&session.LastHeartbeat, &session.Username, &session.ServerName,
 	)
 	if err != nil {
 		return nil, err
@@ -81,7 +82,7 @@ func (s *SessionService) GetByID(id string) (*Session, error) {
 func (s *SessionService) List(limit, offset int) ([]*Session, error) {
 	query := `
 		SELECT s.id, s.user_id, s.server_id, s.start_time, s.end_time, s.status, 
-		       s.client_ip, s.recording_file, u.username, srv.name as server_name
+		       s.client_ip, s.recording_file, s.last_heartbeat, u.username, srv.name as server_name
 		FROM sessions s
 		LEFT JOIN users u ON s.user_id = u.id
 		LEFT JOIN servers srv ON s.server_id = srv.id
@@ -100,7 +101,7 @@ func (s *SessionService) List(limit, offset int) ([]*Session, error) {
 		var session Session
 		err := rows.Scan(&session.ID, &session.UserID, &session.ServerID,
 			&session.StartTime, &session.EndTime, &session.Status,
-			&session.ClientIP, &session.RecordingFile, &session.Username, &session.ServerName)
+			&session.ClientIP, &session.RecordingFile, &session.LastHeartbeat, &session.Username, &session.ServerName)
 		if err != nil {
 			return nil, err
 		}
@@ -114,7 +115,7 @@ func (s *SessionService) List(limit, offset int) ([]*Session, error) {
 func (s *SessionService) GetByUserID(userID int, limit, offset int) ([]*Session, error) {
 	query := `
 		SELECT s.id, s.user_id, s.server_id, s.start_time, s.end_time, s.status, 
-		       s.client_ip, s.recording_file, u.username, srv.name as server_name
+		       s.client_ip, s.recording_file, s.last_heartbeat, u.username, srv.name as server_name
 		FROM sessions s
 		LEFT JOIN users u ON s.user_id = u.id
 		LEFT JOIN servers srv ON s.server_id = srv.id
@@ -134,7 +135,7 @@ func (s *SessionService) GetByUserID(userID int, limit, offset int) ([]*Session,
 		var session Session
 		err := rows.Scan(&session.ID, &session.UserID, &session.ServerID,
 			&session.StartTime, &session.EndTime, &session.Status,
-			&session.ClientIP, &session.RecordingFile, &session.Username, &session.ServerName)
+			&session.ClientIP, &session.RecordingFile, &session.LastHeartbeat, &session.Username, &session.ServerName)
 		if err != nil {
 			return nil, err
 		}
@@ -169,4 +170,73 @@ func (s *SessionService) UpdateRecordingFile(id, recordingFile string) error {
 	query := `UPDATE sessions SET recording_file = ? WHERE id = ?`
 	_, err := s.db.Exec(query, recordingFile, id)
 	return err
+}
+
+// UpdateHeartbeat 更新会话心跳时间
+func (s *SessionService) UpdateHeartbeat(id string) error {
+	query := `UPDATE sessions SET last_heartbeat = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'`
+	_, err := s.db.Exec(query, id)
+	return err
+}
+
+// CleanupStaleActiveSessions 清理超时的活跃会话
+func (s *SessionService) CleanupStaleActiveSessions(timeout time.Duration) (int, error) {
+	// 计算超时时间点
+	timeoutTime := time.Now().Add(-timeout)
+	
+	query := `
+		UPDATE sessions 
+		SET status = 'timeout', end_time = CURRENT_TIMESTAMP 
+		WHERE status = 'active' 
+		AND (last_heartbeat IS NULL OR last_heartbeat < ?)
+	`
+	
+	result, err := s.db.Exec(query, timeoutTime)
+	if err != nil {
+		return 0, err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	
+	return int(rowsAffected), nil
+}
+
+// GetStaleActiveSessions 获取超时的活跃会话
+func (s *SessionService) GetStaleActiveSessions(timeout time.Duration) ([]*Session, error) {
+	timeoutTime := time.Now().Add(-timeout)
+	
+	query := `
+		SELECT s.id, s.user_id, s.server_id, s.start_time, s.end_time, s.status, 
+		       s.client_ip, s.recording_file, s.last_heartbeat, u.username, srv.name as server_name
+		FROM sessions s
+		LEFT JOIN users u ON s.user_id = u.id
+		LEFT JOIN servers srv ON s.server_id = srv.id
+		WHERE s.status = 'active' 
+		AND (s.last_heartbeat IS NULL OR s.last_heartbeat < ?)
+		ORDER BY s.start_time DESC
+	`
+	
+	rows, err := s.db.Query(query, timeoutTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var sessions []*Session
+	for rows.Next() {
+		var session Session
+		err := rows.Scan(&session.ID, &session.UserID, &session.ServerID,
+			&session.StartTime, &session.EndTime, &session.Status,
+			&session.ClientIP, &session.RecordingFile, &session.LastHeartbeat, 
+			&session.Username, &session.ServerName)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, &session)
+	}
+	
+	return sessions, nil
 }
