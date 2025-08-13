@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal, message, Button, Space, Slider, Typography, Card } from 'antd';
-import { PlayCircleOutlined, PauseCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, PauseCircleOutlined, ReloadOutlined, VerticalAlignBottomOutlined } from '@ant-design/icons';
 import { sessionAPI } from '../services/api';
 import type { Session } from '../types';
 import Convert from 'ansi-to-html';
@@ -39,11 +39,13 @@ const SessionReplay: React.FC<SessionReplayProps> = ({ sessionId, visible, onClo
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [autoScroll, setAutoScroll] = useState(true);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const playStartTimeRef = useRef<number>(0);
   const pausedAtRef = useRef<number>(0);
   const convertRef = useRef<Convert | null>(null);
+  const lastScrollHeightRef = useRef<number>(0);
 
   useEffect(() => {
     // 初始化ANSI转换器
@@ -153,6 +155,17 @@ const SessionReplay: React.FC<SessionReplayProps> = ({ sessionId, visible, onClo
     // 使用ansi-to-html处理ANSI转义序列
     const htmlOutput = convertRef.current.toHtml(output);
     terminalRef.current.innerHTML = `<pre style="margin: 0; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.4;">${htmlOutput}</pre>`;
+    
+    // 自动滚动到底部（如果启用且内容有变化）
+    if (autoScroll && terminalRef.current.scrollHeight !== lastScrollHeightRef.current) {
+      // 如果启用了自动滚动，总是滚动到底部
+      terminalRef.current.scrollTo({
+        top: terminalRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+      
+      lastScrollHeightRef.current = terminalRef.current.scrollHeight;
+    }
   };
 
   const play = () => {
@@ -207,6 +220,15 @@ const SessionReplay: React.FC<SessionReplayProps> = ({ sessionId, visible, onClo
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const scrollToBottom = () => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTo({
+        top: terminalRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   return (
     <Modal
       title={`会话回放 - ${session?.server_name || '未知服务器'}`}
@@ -241,7 +263,7 @@ const SessionReplay: React.FC<SessionReplayProps> = ({ sessionId, visible, onClo
           {/* 控制面板 */}
           <Card size="small" style={{ marginBottom: 16 }}>
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
-              <Space>
+              <Space wrap>
                 <Button
                   type="primary"
                   icon={isPlaying ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
@@ -257,6 +279,26 @@ const SessionReplay: React.FC<SessionReplayProps> = ({ sessionId, visible, onClo
                 >
                   重新开始
                 </Button>
+                <Button
+                  type={autoScroll ? 'primary' : 'default'}
+                  icon={<VerticalAlignBottomOutlined />}
+                  onClick={() => setAutoScroll(!autoScroll)}
+                  disabled={!recordingData}
+                  size="small"
+                >
+                  自动滚动
+                </Button>
+                {!autoScroll && (
+                  <Button
+                    icon={<VerticalAlignBottomOutlined />}
+                    onClick={scrollToBottom}
+                    disabled={!recordingData}
+                    size="small"
+                    type="dashed"
+                  >
+                    滚动到底部
+                  </Button>
+                )}
                 <Text>播放速度: {playbackSpeed}x</Text>
                 <Slider
                   min={0.25}

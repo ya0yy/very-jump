@@ -114,9 +114,9 @@ const Servers: React.FC = () => {
   };
 
   const handleConnectServer = (server: Server) => {
-    // 在新窗口中打开终端页面
+    // 在新标签页中打开终端页面
     const terminalUrl = `/terminal/${server.id}`;
-    window.open(terminalUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+    window.open(terminalUrl, '_blank');
   };
 
   const columns = [

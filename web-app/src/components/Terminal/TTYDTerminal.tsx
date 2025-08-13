@@ -4,6 +4,7 @@ import { CloseOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { TerminalProps } from '../../types';
 import api from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
+import { heartbeatManager } from '../../services/heartbeat';
 
 const { Text } = Typography;
 
@@ -46,6 +47,9 @@ const TTYDTerminal: React.FC<TerminalProps> = ({ serverId, serverName, onClose }
         url: absoluteUrl.href
       });
 
+      // 启动心跳
+      heartbeatManager.startHeartbeat(sessionData.session_id);
+
       message.success('终端会话已启动');
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || err.message || '启动终端失败';
@@ -62,6 +66,9 @@ const TTYDTerminal: React.FC<TerminalProps> = ({ serverId, serverName, onClose }
 
   const stopTerminalSession = async (sessionId: string) => {
     try {
+      // 停止心跳
+      heartbeatManager.stopHeartbeat(sessionId);
+      
       await api.post(`/terminal/stop/${sessionId}`);
     } catch (err: any) {
       console.error('停止终端会话失败:', err);

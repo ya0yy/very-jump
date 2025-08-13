@@ -128,6 +128,10 @@ export const sessionAPI = {
     });
     return response.data;
   },
+
+  sendHeartbeat: async (id: string): Promise<void> => {
+    await api.post(`/sessions/${id}/heartbeat`);
+  },
 };
 
 // 用户管理 API (管理员)
