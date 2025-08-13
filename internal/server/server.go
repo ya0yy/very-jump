@@ -181,8 +181,7 @@ func (s *Server) setupRoutes() {
 	})
 
 	// 终端代理路由（使用query参数避免路径冲突）
-	s.router.Any("/proxy-terminal/", middleware.AuthMiddleware(s.cfg), terminalHandler.ProxyToTTYD)
-	s.router.Any("/proxy-terminal/ws", middleware.AuthMiddleware(s.cfg), terminalHandler.ProxyToTTYD)
+	s.router.Any("/proxy-terminal/*proxy-path", middleware.AuthMiddleware(s.cfg), terminalHandler.ProxyToTTYD)
 
 	// SPA 路由处理（前端路由）
 	s.router.NoRoute(func(c *gin.Context) {

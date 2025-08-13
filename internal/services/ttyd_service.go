@@ -89,8 +89,9 @@ type TTYDProcess struct {
 	Process       *os.Process
 	Cancel        context.CancelFunc
 	CreatedAt     time.Time
-	RecordingFile string // 录制文件路径
-	DBSessionID   string // 数据库中的会话ID
+	RecordingFile string           // 录制文件路径
+	DBSessionID   string           // 数据库中的会话ID
+	Recorder      *SessionRecorder // 录制器
 }
 
 // NewTTYDService 创建ttyd服务
@@ -234,6 +235,9 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 
 	log.Printf("ttyd进程启动成功: PID=%d, sessionID=%s", cmd.Process.Pid, sessionID)
 
+	// 创建录制器
+	recorder := NewSessionRecorder(sessionID, recordingFilePath, 80, 24)
+
 	// 创建进程信息
 	process := &TTYDProcess{
 		SessionID:     sessionID,
@@ -246,6 +250,12 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 		Cancel:        cancel,
 		CreatedAt:     time.Now(),
 		RecordingFile: recordingFilePath,
+		Recorder:      recorder,
+	}
+
+	// 启动录制
+	if err := recorder.Start(); err != nil {
+		log.Printf("Failed to start recording: %v", err)
 	}
 
 	// 保存进程信息
@@ -266,20 +276,13 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 	// 创建历史会话记录
 	if ts.sessionService != nil {
 		go func() {
-			// 创建会话记录，暂时不实际录制（跨平台考虑）
-			if session, err := ts.sessionService.Create(userID, server.ID, ipAddress, ""); err != nil {
+			// 创建会话记录，保存录制文件名
+			if session, err := ts.sessionService.Create(userID, server.ID, ipAddress, recordingFileName); err != nil {
 				log.Printf("Failed to create session record: %v", err)
 			} else {
 				// 保存数据库会话ID到进程信息中
 				process.DBSessionID = session.ID
-				log.Printf("Session record created: %s (recording disabled for cross-platform compatibility)", session.ID)
-
-				// TODO: 后续可以实现应用层录制功能
-				// 通过监听WebSocket数据流来录制终端会话
-				// 创建占位录制文件
-				if recordingFilePath != "" {
-					go ts.createPlaceholderRecording(recordingFilePath, sessionID)
-				}
+				log.Printf("Session record created: %s, recording file: %s", session.ID, recordingFileName)
 			}
 		}()
 	}
@@ -331,6 +334,13 @@ func (ts *TTYDService) StopTTYDSession(sessionID string) error {
 				log.Printf("Failed to log terminal end audit: %v", err)
 			}
 		}()
+	}
+
+	// 停止录制
+	if process.Recorder != nil {
+		if err := process.Recorder.Stop(); err != nil {
+			log.Printf("Failed to stop recording: %v", err)
+		}
 	}
 
 	// 更新数据库中的会话状态
@@ -485,6 +495,13 @@ func (ts *TTYDService) monitorProcess(process *TTYDProcess, cmd *exec.Cmd) {
 			}()
 		}
 
+		// 停止录制
+		if process.Recorder != nil {
+			if err := process.Recorder.Stop(); err != nil {
+				log.Printf("Failed to stop recording: %v", err)
+			}
+		}
+
 		// 更新数据库中的会话状态
 		if ts.sessionService != nil && process.DBSessionID != "" {
 			go func() {
@@ -596,20 +613,4 @@ func (ts *TTYDService) GetRecordingsInfo() (int, int64, error) {
 	}
 
 	return fileCount, totalSize, nil
-}
-
-// createPlaceholderRecording 创建占位录制文件
-func (ts *TTYDService) createPlaceholderRecording(recordingPath, sessionID string) {
-	// 创建一个简单的占位文件，说明录制功能待实现
-	placeholder := fmt.Sprintf(`{"version": 2, "width": 80, "height": 24, "timestamp": %d}
-[0, "o", "Recording functionality is disabled for cross-platform compatibility.\r\n"]
-[1, "o", "Session ID: %s\r\n"]
-[2, "o", "Future implementation will capture terminal sessions via WebSocket monitoring.\r\n"]
-`, time.Now().Unix(), sessionID)
-
-	if err := os.WriteFile(recordingPath, []byte(placeholder), 0644); err != nil {
-		log.Printf("Failed to create placeholder recording file: %v", err)
-	} else {
-		log.Printf("Created placeholder recording file: %s", recordingPath)
-	}
 }

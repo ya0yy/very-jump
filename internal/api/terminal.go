@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -12,12 +13,14 @@ import (
 	"very-jump/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 // TerminalHandler 终端处理器
 type TerminalHandler struct {
 	ttydService   *services.TTYDService
 	serverService *models.ServerService
+	upgrader      websocket.Upgrader
 }
 
 // NewTerminalHandler 创建终端处理器
@@ -25,6 +28,11 @@ func NewTerminalHandler(ttydService *services.TTYDService, serverService *models
 	return &TerminalHandler{
 		ttydService:   ttydService,
 		serverService: serverService,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true // 允许所有来源，生产环境应该更严格
+			},
+		},
 	}
 }
 
@@ -81,7 +89,7 @@ func (h *TerminalHandler) StartTerminal(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// ProxyToTTYD 代理请求到ttyd
+// ProxyToTTYD 代理请求到ttyd，支持录制
 func (h *TerminalHandler) ProxyToTTYD(c *gin.Context) {
 	sessionID := c.Query("session_id")
 	if sessionID == "" {
@@ -95,16 +103,25 @@ func (h *TerminalHandler) ProxyToTTYD(c *gin.Context) {
 		return
 	}
 
-	target, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", process.Port))
+	// 构造后端目标 URL
+	targetURL := fmt.Sprintf("http://127.0.0.1:%d", process.Port)
+
+	if c.IsWebsocket() {
+		log.Printf("Handling WebSocket request for session %s", process.SessionID)
+		h.handleWebSocketWithRecording(c, process)
+		return
+	} else {
+		log.Printf("Handling HTTP request for session %s", process.SessionID)
+	}
+
+	// 处理普通 HTTP 请求 - 标准代理（原有逻辑）
+	target, err := url.Parse(targetURL)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Error creating proxy target")
 		return
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
-
-	// This is the critical part for WebSocket proxying.
-	// We need to hijack the connection and handle the upgrade manually.
 	proxy.Director = func(req *http.Request) {
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
@@ -112,8 +129,112 @@ func (h *TerminalHandler) ProxyToTTYD(c *gin.Context) {
 		req.Host = target.Host
 	}
 
-	// For regular HTTP requests, use the standard proxy.
 	proxy.ServeHTTP(c.Writer, c.Request)
+}
+
+// handleWebSocketWithRecording 处理WebSocket连接并录制数据
+func (h *TerminalHandler) handleWebSocketWithRecording(c *gin.Context, process *services.TTYDProcess) {
+	log.Printf("WebSocket upgrade attempt for session %s, path: %s, headers: %v",
+		process.SessionID, c.Request.URL.Path, c.Request.Header)
+
+	rheader := http.Header{
+		"sec-websocket-protocol": []string{"tty"},
+	}
+	// 升级客户端连接为WebSocket
+	clientConn, err := h.upgrader.Upgrade(c.Writer, c.Request, rheader)
+	if err != nil {
+		log.Printf("Failed to upgrade client connection for session %s: %v", process.SessionID, err)
+		return
+	}
+	defer func() {
+		log.Printf("Closing client connection for session %s", process.SessionID)
+		clientConn.Close()
+	}()
+
+	ttydPath := "/proxy-terminal/ws"
+	ttydURL := fmt.Sprintf("ws://127.0.0.1:%d%s", process.Port, ttydPath)
+
+	log.Printf("Connecting to ttyd WebSocket: %s", ttydURL)
+
+	// 连接到ttyd
+	ttydConn, _, err := websocket.DefaultDialer.Dial(ttydURL, rheader)
+	if err != nil {
+		log.Printf("Failed to connect to ttyd WebSocket: %v", err)
+		clientConn.WriteMessage(websocket.CloseMessage, []byte("Failed to connect to terminal"))
+		return
+	}
+	defer ttydConn.Close()
+
+	log.Printf("WebSocket proxy with recording established for session %s", process.SessionID)
+
+	// 使用channel来同步两个goroutine
+	clientDone := make(chan struct{})
+	ttydDone := make(chan struct{})
+
+	// 客户端 -> ttyd (用户输入)
+	go func() {
+		defer close(clientDone)
+		for {
+			messageType, message, err := clientConn.ReadMessage()
+			if err != nil {
+				if !websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
+					log.Printf("Client WebSocket read error: %v", err)
+				}
+				break
+			}
+
+			// 录制用户输入（只录制文本消息）
+
+			if messageType == websocket.BinaryMessage && process.Recorder != nil && process.Recorder.IsRecording() {
+				if err := process.Recorder.WriteInput(message); err != nil {
+					log.Printf("Failed to record input: %v", err)
+				}
+			}
+
+			// 转发到ttyd
+			if err := ttydConn.WriteMessage(messageType, message); err != nil {
+				log.Printf("Failed to forward to ttyd: %v", err)
+				break
+			}
+		}
+	}()
+
+	// ttyd -> 客户端 (终端输出)
+	go func() {
+		defer close(ttydDone)
+		for {
+			messageType, message, err := ttydConn.ReadMessage()
+			if err != nil {
+				if !websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
+					log.Printf("TTYD WebSocket read error: %v", err)
+				}
+				break
+			}
+
+			// 录制终端输出（只录制文本消息）
+			if messageType == websocket.BinaryMessage && process.Recorder != nil && process.Recorder.IsRecording() {
+				if err := process.Recorder.WriteOutput(message); err != nil {
+					log.Printf("Failed to record output: %v", err)
+				}
+			}
+
+			// 转发到客户端
+			if err := clientConn.WriteMessage(messageType, message); err != nil {
+				log.Printf("Failed to forward to client: %v", err)
+				break
+			}
+		}
+	}()
+
+	// 等待任一方向的连接关闭
+	select {
+	case <-clientDone:
+		log.Printf("Client connection closed for session %s", process.SessionID)
+	case <-ttydDone:
+		log.Printf("TTYD connection closed for session %s", process.SessionID)
+	}
+
+	log.Printf("WebSocket proxy with recording closed for session %s", process.SessionID)
 }
 
 // StopTerminal 停止终端会话
