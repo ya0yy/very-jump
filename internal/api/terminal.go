@@ -78,6 +78,12 @@ func (h *TerminalHandler) StartTerminal(c *gin.Context) {
 		return
 	}
 
+	// 更新服务器上次登录时间
+	if err := h.serverService.UpdateLastLoginTime(serverID); err != nil {
+		log.Printf("Failed to update last login time for server %d: %v", serverID, err)
+		// 不影响主流程，只记录错误
+	}
+
 	url := fmt.Sprintf("/proxy-terminal/?session_id=%s", process.SessionID)
 
 	response := StartTerminalResponse{

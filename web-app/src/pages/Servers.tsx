@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Table,
   Button,
@@ -21,6 +21,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   LinkOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { serverAPI } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
@@ -38,19 +39,42 @@ const Servers: React.FC = () => {
 
   const [form] = Form.useForm();
   const { user } = useAuthStore();
-  const { servers, setServers } = useAppStore();
+  const { servers, setServers, updateServerStatus } = useAppStore();
 
   const fetchServers = async () => {
     try {
       setLoading(true);
       const data = await serverAPI.getServers();
-      setServers(data.servers);
+      // 为每个服务器设置初始状态为检测中
+      const serversWithStatus = data.servers.map((server: Server) => ({
+        ...server,
+        status: 'checking' as const
+      }));
+      setServers(serversWithStatus);
+
+      // 异步检测每个服务器的状态
+      checkServersStatus(serversWithStatus);
     } catch (error: any) {
       message.error('获取服务器列表失败');
     } finally {
       setLoading(false);
     }
   };
+
+  const checkServersStatus = useCallback(async (serverList: Server[]) => {
+    // 并发检测所有服务器状态，但逐个更新UI
+    const statusPromises = serverList.map(async (server) => {
+      try {
+        const result = await serverAPI.checkServerStatus(server.id);
+        updateServerStatus(server.id, result.status);
+      } catch (error) {
+        updateServerStatus(server.id, 'unavailable');
+      }
+    });
+
+    // 等待所有检测完成（虽然UI已经逐个更新了）
+    await Promise.all(statusPromises);
+  }, [updateServerStatus]);
 
   useEffect(() => {
     if (!user) return;
@@ -72,6 +96,7 @@ const Servers: React.FC = () => {
       username: server.username,
       auth_type: server.auth_type,
       description: server.description,
+      tags: server.tags || [],
     });
     setModalVisible(true);
   };
@@ -92,6 +117,7 @@ const Servers: React.FC = () => {
       const serverData: ServerCreateRequest = {
         ...values,
         port: values.port || 22,
+        tags: values.tags || [],
       };
 
       if (editingServer) {
@@ -117,6 +143,18 @@ const Servers: React.FC = () => {
     // 在新标签页中打开终端页面
     const terminalUrl = `/terminal/${server.id}`;
     window.open(terminalUrl, '_blank');
+  };
+
+  const handleRefreshStatus = async () => {
+    if (servers.length === 0) return;
+
+    // 将所有服务器状态设置为检测中
+    servers.forEach(server => {
+      updateServerStatus(server.id, 'checking');
+    });
+
+    // 重新检测状态
+    await checkServersStatus(servers);
   };
 
   const columns = [
@@ -147,6 +185,57 @@ const Servers: React.FC = () => {
           {authType === 'password' ? '密码' : '密钥'}
         </Tag>
       ),
+    },
+    {
+      title: '标签',
+      dataIndex: 'tags',
+      key: 'tags',
+      render: (tags: string[]) => (
+        <Space size={[0, 4]} wrap>
+          {tags && tags.length > 0 ? (
+            tags.map((tag, index) => (
+              <Tag key={index} color="default">
+                {tag}
+              </Tag>
+            ))
+          ) : (
+            <Typography.Text type="secondary">无标签</Typography.Text>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: '服务器状态',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: string) => {
+        const statusConfig = {
+          available: { color: 'success', text: '可用' },
+          unavailable: { color: 'error', text: '不可用' },
+          checking: { color: 'processing', text: '检测中' }
+        };
+        const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.checking;
+        return <Tag color={config.color}>{config.text}</Tag>;
+      },
+    },
+    {
+      title: '上次登录时间',
+      dataIndex: 'last_login_time',
+      key: 'last_login_time',
+      render: (lastLoginTime: string) => {
+        if (!lastLoginTime) {
+          return <Typography.Text type="secondary">从未登录</Typography.Text>;
+        }
+        const date = new Date(lastLoginTime);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        const formattedTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        return <Typography.Text>{formattedTime}</Typography.Text>;
+      },
     },
     {
       title: '操作',
@@ -184,15 +273,23 @@ const Servers: React.FC = () => {
         <Title level={2} style={{ margin: 0 }}>
           服务器管理
         </Title>
-        {user?.role === 'admin' && (
+        <Space>
           <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAddServer}
+            icon={<ReloadOutlined />}
+            onClick={handleRefreshStatus}
           >
-            添加服务器
+            刷新状态
           </Button>
-        )}
+          {user?.role === 'admin' && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAddServer}
+            >
+              添加服务器
+            </Button>
+          )}
+        </Space>
       </div>
 
       <Table
@@ -304,6 +401,19 @@ const Servers: React.FC = () => {
                 </Form.Item>
               );
             }}
+          </Form.Item>
+
+          <Form.Item
+            name="tags"
+            label="标签 (可选)"
+            tooltip="用于分类整理服务器，支持多个标签"
+          >
+            <Select
+              mode="tags"
+              style={{ width: '100%' }}
+              placeholder="输入标签后按回车添加，例如：生产环境、测试服务器"
+              tokenSeparators={[',']}
+            />
           </Form.Item>
 
           <Form.Item

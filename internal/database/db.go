@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS servers (
     password VARCHAR(255),
     private_key TEXT,
     description TEXT,
+    tags TEXT,
+    last_login_time DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -185,6 +187,6 @@ CREATE INDEX IF NOT EXISTS idx_security_alerts_resolved ON security_alerts(resol
 `
 
 const insertDefaultAdmin = `
-INSERT OR IGNORE INTO users (username, password_hash, role) 
+INSERT OR IGNORE INTO users (username, password_hash, role)
 VALUES ('admin', '$2a$10$u4V8qHD8a4YyP0ylvUjAb.hhJ8KdhJ32.rV1jOcxyAoinpJu64vo2', 'admin');
 `

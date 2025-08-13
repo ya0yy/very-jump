@@ -86,6 +86,11 @@ export const serverAPI = {
     await api.delete(`/admin/servers/${id}`);
   },
 
+  checkServerStatus: async (id: number): Promise<{ server_id: number; status: string }> => {
+    const response = await api.get(`/servers/${id}/status`);
+    return response.data;
+  },
+
   testConnection: async (id: number): Promise<{ success: boolean; message: string }> => {
     const response = await api.post(`/admin/servers/${id}/test`);
     return response.data;

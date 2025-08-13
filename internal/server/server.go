@@ -126,6 +126,7 @@ func (s *Server) setupRoutes() {
 			{
 				servers.GET("", serverHandler.List)
 				servers.GET("/:id", serverHandler.Get)
+				servers.GET("/:id/status", serverHandler.CheckStatus)
 			}
 
 			// 会话管理

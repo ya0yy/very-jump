@@ -16,6 +16,9 @@ export interface Server {
   username: string;
   auth_type: 'password' | 'key';
   description: string;
+  tags: string[];
+  last_login_time?: string;
+  status?: 'available' | 'unavailable' | 'checking';
   created_at: string;
   updated_at: string;
 }
@@ -84,6 +87,7 @@ export interface ServerCreateRequest {
   password?: string;
   private_key?: string;
   description: string;
+  tags: string[];
 }
 
 export interface UserCreateRequest {
@@ -110,6 +114,7 @@ export interface AppState {
   loading: boolean;
   error: string | null;
   setServers: (servers: Server[]) => void;
+  updateServerStatus: (serverId: number, status: string) => void;
   setSessions: (sessions: Session[]) => void;
   setActiveSessions: (count: number) => void;
   setLoading: (loading: boolean) => void;

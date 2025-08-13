@@ -133,3 +133,23 @@ func (h *ServerHandler) Delete(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "服务器已删除"})
 }
+
+// CheckStatus 检测服务器状态
+func (h *ServerHandler) CheckStatus(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的服务器ID"})
+		return
+	}
+
+	status, err := h.serverService.CheckServerStatusByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"server_id": id,
+		"status":    status,
+	})
+}
