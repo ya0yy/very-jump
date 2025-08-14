@@ -69,13 +69,14 @@ expect {
 
 // TTYDService ttyd服务
 type TTYDService struct {
-	dataDir        string
-	processes      map[string]*TTYDProcess // key: sessionID, value: ttyd进程信息
-	mutex          sync.RWMutex
-	basePort       int           // 基础端口号，从7681开始
-	auditService   *AuditService // 审计服务
-	sessionService *models.SessionService
-	recordingsDir  string // 录制文件存储目录
+	dataDir           string
+	processes         map[string]*TTYDProcess // key: sessionID, value: ttyd进程信息
+	mutex             sync.RWMutex
+	basePort          int           // 基础端口号，从7681开始
+	auditService      *AuditService // 审计服务
+	sessionService    *models.SessionService
+	credentialService *models.CredentialService // 登录凭证服务
+	recordingsDir     string                    // 录制文件存储目录
 }
 
 // TTYDProcess ttyd进程信息
@@ -95,18 +96,19 @@ type TTYDProcess struct {
 }
 
 // NewTTYDService 创建ttyd服务
-func NewTTYDService(dataDir string, auditService *AuditService, sessionService *models.SessionService) *TTYDService {
+func NewTTYDService(dataDir string, auditService *AuditService, sessionService *models.SessionService, credentialService *models.CredentialService) *TTYDService {
 	recordingsDir := filepath.Join(dataDir, "recordings")
 	// 确保录制目录存在
 	os.MkdirAll(recordingsDir, 0755)
 
 	return &TTYDService{
-		dataDir:        dataDir,
-		processes:      make(map[string]*TTYDProcess),
-		basePort:       7681,
-		auditService:   auditService,
-		sessionService: sessionService,
-		recordingsDir:  recordingsDir,
+		dataDir:           dataDir,
+		processes:         make(map[string]*TTYDProcess),
+		basePort:          7681,
+		auditService:      auditService,
+		sessionService:    sessionService,
+		credentialService: credentialService,
+		recordingsDir:     recordingsDir,
 	}
 }
 
@@ -191,6 +193,50 @@ func (ts *TTYDService) StartTTYDSessionWithAudit(server *models.Server, userID i
 			fmt.Sprintf("%s@%s", server.Username, server.Host),
 			"-p", strconv.Itoa(server.Port),
 		)
+	} else if server.AuthType == "credential" {
+		// 获取登录凭证
+		if server.CredentialID == nil {
+			return nil, fmt.Errorf("服务器配置了登录凭证认证但未指定凭证ID")
+		}
+
+		credential, err := ts.credentialService.GetByID(*server.CredentialID)
+		if err != nil {
+			return nil, fmt.Errorf("获取登录凭证失败: %v", err)
+		}
+
+		if credential.Type == "password" {
+			// 使用凭证中的密码认证
+			expectScript, err := ts.createTempExpectScript(sessionID)
+			if err != nil {
+				return nil, fmt.Errorf("创建expect脚本失败: %v", err)
+			}
+			log.Printf("DEBUG: Using credential password auth for user=%s, host=%s, port=%d", credential.Username, server.Host, server.Port)
+			args = append(args,
+				"expect",
+				expectScript,
+				credential.Username,
+				credential.Password,
+				server.Host,
+				strconv.Itoa(server.Port),
+			)
+		} else if credential.Type == "key" {
+			// 使用凭证中的密钥认证
+			keyFile, err := ts.createTempKeyFile(credential.PrivateKey, sessionID)
+			if err != nil {
+				return nil, fmt.Errorf("创建临时密钥文件失败: %v", err)
+			}
+			log.Printf("DEBUG: Using credential key auth for user=%s, host=%s, port=%d", credential.Username, server.Host, server.Port)
+			args = append(args,
+				"ssh",
+				"-i", keyFile,
+				"-o", "StrictHostKeyChecking=no",
+				"-o", "UserKnownHostsFile=/dev/null",
+				fmt.Sprintf("%s@%s", credential.Username, server.Host),
+				"-p", strconv.Itoa(server.Port),
+			)
+		} else {
+			return nil, fmt.Errorf("不支持的凭证类型: %s", credential.Type)
+		}
 	} else {
 		return nil, fmt.Errorf("不支持的认证类型: %s", server.AuthType)
 	}

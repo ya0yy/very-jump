@@ -7,6 +7,7 @@ import AppLayout from './components/Layout/AppLayout';
 import LoginForm from './components/Auth/LoginForm';
 import Dashboard from './pages/Dashboard';
 import Servers from './pages/Servers';
+import Credentials from './pages/Credentials';
 import Sessions from './pages/Sessions';
 import AuditLogs from './pages/AuditLogs';
 import Audit from './pages/Audit';
@@ -101,6 +102,14 @@ const App: React.FC = () => {
               element={
                 <AdminRoute>
                   <Users />
+                </AdminRoute>
+              }
+            />
+            <Route
+              path="credentials"
+              element={
+                <AdminRoute>
+                  <Credentials />
                 </AdminRoute>
               }
             />

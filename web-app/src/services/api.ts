@@ -1,15 +1,17 @@
 import axios, { type AxiosResponse } from 'axios';
-import type { 
-  LoginRequest, 
-  LoginResponse, 
-  User, 
-  ServerListResponse, 
+import type {
+  LoginRequest,
+  LoginResponse,
+  User,
+  ServerListResponse,
   SessionListResponse,
   ServerCreateRequest,
   UserCreateRequest,
   Server,
   Session,
-  AuditLog
+  AuditLog,
+  Credential,
+  CredentialCreateRequest
 } from '../types';
 
 // 创建 axios 实例
@@ -94,6 +96,33 @@ export const serverAPI = {
   testConnection: async (id: number): Promise<{ success: boolean; message: string }> => {
     const response = await api.post(`/admin/servers/${id}/test`);
     return response.data;
+  },
+};
+
+// 登录凭证 API
+export const credentialAPI = {
+  getCredentials: async (): Promise<{ credentials: Credential[]; total: number }> => {
+    const response = await api.get('/credentials');
+    return response.data;
+  },
+
+  getCredential: async (id: number): Promise<Credential> => {
+    const response = await api.get(`/admin/credentials/${id}`);
+    return response.data;
+  },
+
+  createCredential: async (data: CredentialCreateRequest): Promise<Credential> => {
+    const response = await api.post('/admin/credentials', data);
+    return response.data;
+  },
+
+  updateCredential: async (id: number, data: Partial<CredentialCreateRequest>): Promise<Credential> => {
+    const response = await api.put(`/admin/credentials/${id}`, data);
+    return response.data;
+  },
+
+  deleteCredential: async (id: number): Promise<void> => {
+    await api.delete(`/admin/credentials/${id}`);
   },
 };
 

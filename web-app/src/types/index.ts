@@ -14,7 +14,9 @@ export interface Server {
   host: string;
   port: number;
   username: string;
-  auth_type: 'password' | 'key';
+  auth_type: 'password' | 'key' | 'credential';
+  credential_id?: number;
+  credential_name?: string;
   description: string;
   tags: string[];
   last_login_time?: string;
@@ -78,14 +80,33 @@ export interface SessionListResponse {
   total: number;
 }
 
+export interface Credential {
+  id: number;
+  name: string;
+  type: 'password' | 'key';
+  username: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CredentialCreateRequest {
+  name: string;
+  type: 'password' | 'key';
+  username: string;
+  password?: string;
+  private_key?: string;
+  key_password?: string;
+}
+
 export interface ServerCreateRequest {
   name: string;
   host: string;
   port: number;
   username: string;
-  auth_type: 'password' | 'key';
+  auth_type: 'password' | 'key' | 'credential';
   password?: string;
   private_key?: string;
+  credential_id?: number;
   description: string;
   tags: string[];
 }

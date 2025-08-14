@@ -6,6 +6,7 @@ import {
   AuditOutlined,
   SafetyOutlined,
   UserOutlined,
+  KeyOutlined,
   LogoutOutlined,
   DashboardOutlined,
 } from '@ant-design/icons';
@@ -69,11 +70,18 @@ const AppLayout: React.FC = () => {
       icon: <SafetyOutlined />,
       label: '安全审计',
     },
-    ...(user?.role === 'admin' ? [{
-      key: '/users',
-      icon: <UserOutlined />,
-      label: '用户管理',
-    }] : []),
+    ...(user?.role === 'admin' ? [
+      {
+        key: '/users',
+        icon: <UserOutlined />,
+        label: '用户管理',
+      },
+      {
+        key: '/credentials',
+        icon: <KeyOutlined />,
+        label: '登录凭证',
+      }
+    ] : []),
   ];
 
   const userMenuItems = [

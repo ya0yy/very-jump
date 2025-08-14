@@ -36,8 +36,11 @@ func New(cfg *config.Config, db *sql.DB) *Server {
 	// 初始化会话服务
 	sessionService := models.NewSessionService(db)
 
+	// 初始化凭证服务
+	credentialService := models.NewCredentialService(db)
+
 	// 初始化ttyd服务
-	ttydService := services.NewTTYDService(cfg.DataDir, auditService, sessionService)
+	ttydService := services.NewTTYDService(cfg.DataDir, auditService, sessionService, credentialService)
 
 	// 初始化会话监控服务
 	sessionMonitor := services.NewSessionMonitor(sessionService, ttydService)
@@ -91,6 +94,7 @@ func (s *Server) setupRoutes() {
 	// 创建服务
 	authService := services.NewAuthService(s.cfg, s.db)
 	serverService := models.NewServerService(s.db)
+	credentialService := models.NewCredentialService(s.db)
 	userService := models.NewUserService(s.db)
 	sessionService := models.NewSessionService(s.db)
 	// auditLogService := models.NewAuditLogService(s.db)
@@ -98,6 +102,7 @@ func (s *Server) setupRoutes() {
 	// 创建处理器
 	authHandler := api.NewAuthHandler(authService)
 	serverHandler := api.NewServerHandler(serverService)
+	credentialHandler := api.NewCredentialHandler(credentialService)
 	userHandler := api.NewUserHandler(userService)
 	recordingsDir := filepath.Join(s.cfg.DataDir, "recordings")
 	sessionHandler := api.NewSessionHandler(sessionService, recordingsDir, s.ttydService)
@@ -141,6 +146,12 @@ func (s *Server) setupRoutes() {
 				sessions.POST("/:id/heartbeat", sessionHandler.Heartbeat)
 			}
 
+			// 登录凭证（只读，用于创建服务器时选择）
+			credentials := authenticated.Group("/credentials")
+			{
+				credentials.GET("", credentialHandler.List)
+			}
+
 			// 审计日志 (旧版，保留兼容性)
 			// auditLogs := authenticated.Group("/audit-logs")
 			// {
@@ -156,6 +167,16 @@ func (s *Server) setupRoutes() {
 				admin.PUT("/servers/:id", serverHandler.Update)
 				admin.DELETE("/servers/:id", serverHandler.Delete)
 
+				// 登录凭证管理
+				credentials := admin.Group("/credentials")
+				{
+					credentials.GET("", credentialHandler.List)
+					credentials.GET("/:id", credentialHandler.Get)
+					credentials.POST("", credentialHandler.Create)
+					credentials.PUT("/:id", credentialHandler.Update)
+					credentials.DELETE("/:id", credentialHandler.Delete)
+				}
+
 				// 用户管理
 				admin.GET("/users", userHandler.List)
 				admin.POST("/users", userHandler.Create)
@@ -165,7 +186,7 @@ func (s *Server) setupRoutes() {
 
 				// 系统统计
 				admin.GET("/stats", statsHandler.GetStats)
-				
+
 				// 会话管理（管理员）
 				admin.POST("/sessions/cleanup", sessionHandler.CleanupStaleSessions)
 			}

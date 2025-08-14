@@ -10,47 +10,51 @@ import (
 
 // Server 服务器模型
 type Server struct {
-	ID            int        `json:"id" db:"id"`
-	Name          string     `json:"name" db:"name"`
-	Host          string     `json:"host" db:"host"`
-	Port          int        `json:"port" db:"port"`
-	Username      string     `json:"username" db:"username"`
-	AuthType      string     `json:"auth_type" db:"auth_type"`
-	Password      string     `json:"-" db:"password"`
-	PrivateKey    string     `json:"-" db:"private_key"`
-	Description   string     `json:"description" db:"description"`
-	TagsRaw       *string    `json:"-" db:"tags"` // 数据库存储的原始tags字符串
-	Tags          []string   `json:"tags" db:"-"` // JSON返回的tags数组
-	LastLoginTime *time.Time `json:"last_login_time" db:"last_login_time"`
-	Status        string     `json:"status" db:"-"` // 不入库，实时检测
-	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
+	ID             int        `json:"id" db:"id"`
+	Name           string     `json:"name" db:"name"`
+	Host           string     `json:"host" db:"host"`
+	Port           int        `json:"port" db:"port"`
+	Username       string     `json:"username" db:"username"`
+	AuthType       string     `json:"auth_type" db:"auth_type"` // "password", "key", "credential"
+	Password       string     `json:"-" db:"password"`
+	PrivateKey     string     `json:"-" db:"private_key"`
+	CredentialID   *int       `json:"credential_id" db:"credential_id"` // 登录凭证ID
+	CredentialName string     `json:"credential_name" db:"-"`           // 凭证名称，不入库
+	Description    string     `json:"description" db:"description"`
+	TagsRaw        *string    `json:"-" db:"tags"` // 数据库存储的原始tags字符串
+	Tags           []string   `json:"tags" db:"-"` // JSON返回的tags数组
+	LastLoginTime  *time.Time `json:"last_login_time" db:"last_login_time"`
+	Status         string     `json:"status" db:"-"` // 不入库，实时检测
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // ServerCreate 创建服务器请求
 type ServerCreate struct {
-	Name        string   `json:"name" binding:"required,min=1,max=100"`
-	Host        string   `json:"host" binding:"required"`
-	Port        int      `json:"port" binding:"omitempty,min=1,max=65535"`
-	Username    string   `json:"username" binding:"required"`
-	AuthType    string   `json:"auth_type" binding:"required,oneof=password key"`
-	Password    string   `json:"password" binding:"required_if=AuthType password"`
-	PrivateKey  string   `json:"private_key" binding:"required_if=AuthType key"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
+	Name         string   `json:"name" binding:"required,min=1,max=100"`
+	Host         string   `json:"host" binding:"required"`
+	Port         int      `json:"port" binding:"omitempty,min=1,max=65535"`
+	Username     string   `json:"username" binding:"required"`
+	AuthType     string   `json:"auth_type" binding:"required,oneof=password key credential"`
+	Password     string   `json:"password" binding:"required_if=AuthType password"`
+	PrivateKey   string   `json:"private_key" binding:"required_if=AuthType key"`
+	CredentialID *int     `json:"credential_id" binding:"required_if=AuthType credential"`
+	Description  string   `json:"description"`
+	Tags         []string `json:"tags"`
 }
 
 // ServerUpdate 更新服务器请求
 type ServerUpdate struct {
-	Name        string   `json:"name" binding:"omitempty,min=1,max=100"`
-	Host        string   `json:"host" binding:"omitempty"`
-	Port        int      `json:"port" binding:"omitempty,min=1,max=65535"`
-	Username    string   `json:"username" binding:"omitempty"`
-	AuthType    string   `json:"auth_type" binding:"omitempty,oneof=password key"`
-	Password    string   `json:"password"`
-	PrivateKey  string   `json:"private_key"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
+	Name         string   `json:"name" binding:"omitempty,min=1,max=100"`
+	Host         string   `json:"host" binding:"omitempty"`
+	Port         int      `json:"port" binding:"omitempty,min=1,max=65535"`
+	Username     string   `json:"username" binding:"omitempty"`
+	AuthType     string   `json:"auth_type" binding:"omitempty,oneof=password key credential"`
+	Password     string   `json:"password"`
+	PrivateKey   string   `json:"private_key"`
+	CredentialID *int     `json:"credential_id"`
+	Description  string   `json:"description"`
+	Tags         []string `json:"tags"`
 }
 
 // ServerService 服务器服务
@@ -97,16 +101,16 @@ func (s *ServerService) Create(req *ServerCreate) (*Server, error) {
 	tagsStr := tagsToString(req.Tags)
 
 	query := `
-		INSERT INTO servers (name, host, port, username, auth_type, password, private_key, description, tags)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, name, host, port, username, auth_type, description, tags, created_at, updated_at
+		INSERT INTO servers (name, host, port, username, auth_type, password, private_key, credential_id, description, tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, name, host, port, username, auth_type, credential_id, description, tags, created_at, updated_at
 	`
 
 	var server Server
 	err := s.db.QueryRow(query, req.Name, req.Host, req.Port, req.Username,
-		req.AuthType, req.Password, req.PrivateKey, req.Description, tagsStr).Scan(
+		req.AuthType, req.Password, req.PrivateKey, req.CredentialID, req.Description, tagsStr).Scan(
 		&server.ID, &server.Name, &server.Host, &server.Port, &server.Username,
-		&server.AuthType, &server.Description, &server.TagsRaw, &server.CreatedAt, &server.UpdatedAt,
+		&server.AuthType, &server.CredentialID, &server.Description, &server.TagsRaw, &server.CreatedAt, &server.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -118,12 +122,12 @@ func (s *ServerService) Create(req *ServerCreate) (*Server, error) {
 
 // GetByID 根据ID获取服务器
 func (s *ServerService) GetByID(id int) (*Server, error) {
-	query := `SELECT id, name, host, port, username, auth_type, password, private_key, description, tags, last_login_time, created_at, updated_at FROM servers WHERE id = ?`
+	query := `SELECT id, name, host, port, username, auth_type, password, private_key, credential_id, description, tags, last_login_time, created_at, updated_at FROM servers WHERE id = ?`
 
 	var server Server
 	err := s.db.QueryRow(query, id).Scan(
 		&server.ID, &server.Name, &server.Host, &server.Port, &server.Username,
-		&server.AuthType, &server.Password, &server.PrivateKey, &server.Description,
+		&server.AuthType, &server.Password, &server.PrivateKey, &server.CredentialID, &server.Description,
 		&server.TagsRaw, &server.LastLoginTime, &server.CreatedAt, &server.UpdatedAt,
 	)
 	if err != nil {
@@ -136,7 +140,15 @@ func (s *ServerService) GetByID(id int) (*Server, error) {
 
 // List 获取服务器列表
 func (s *ServerService) List(limit, offset int) ([]*Server, error) {
-	query := `SELECT id, name, host, port, username, auth_type, description, tags, last_login_time, created_at, updated_at FROM servers ORDER BY created_at DESC LIMIT ? OFFSET ?`
+	query := `
+		SELECT s.id, s.name, s.host, s.port, s.username, s.auth_type, s.credential_id,
+		       s.description, s.tags, s.last_login_time, s.created_at, s.updated_at,
+		       c.name as credential_name
+		FROM servers s
+		LEFT JOIN credentials c ON s.credential_id = c.id
+		ORDER BY s.created_at DESC
+		LIMIT ? OFFSET ?
+	`
 
 	rows, err := s.db.Query(query, limit, offset)
 	if err != nil {
@@ -147,11 +159,16 @@ func (s *ServerService) List(limit, offset int) ([]*Server, error) {
 	var servers []*Server
 	for rows.Next() {
 		var server Server
+		var credentialName *string
 		err := rows.Scan(&server.ID, &server.Name, &server.Host, &server.Port,
-			&server.Username, &server.AuthType, &server.Description,
-			&server.TagsRaw, &server.LastLoginTime, &server.CreatedAt, &server.UpdatedAt)
+			&server.Username, &server.AuthType, &server.CredentialID, &server.Description,
+			&server.TagsRaw, &server.LastLoginTime, &server.CreatedAt, &server.UpdatedAt,
+			&credentialName)
 		if err != nil {
 			return nil, err
+		}
+		if credentialName != nil {
+			server.CredentialName = *credentialName
 		}
 		server.processTags()
 		servers = append(servers, &server)
@@ -163,9 +180,12 @@ func (s *ServerService) List(limit, offset int) ([]*Server, error) {
 // GetByUserID 获取用户有权限的服务器列表
 func (s *ServerService) GetByUserID(userID int, limit, offset int) ([]*Server, error) {
 	query := `
-		SELECT s.id, s.name, s.host, s.port, s.username, s.auth_type, s.description, s.tags, s.last_login_time, s.created_at, s.updated_at
+		SELECT s.id, s.name, s.host, s.port, s.username, s.auth_type, s.credential_id,
+		       s.description, s.tags, s.last_login_time, s.created_at, s.updated_at,
+		       c.name as credential_name
 		FROM servers s
 		INNER JOIN user_server_permissions p ON s.id = p.server_id
+		LEFT JOIN credentials c ON s.credential_id = c.id
 		WHERE p.user_id = ?
 		ORDER BY s.created_at DESC
 		LIMIT ? OFFSET ?
@@ -180,11 +200,16 @@ func (s *ServerService) GetByUserID(userID int, limit, offset int) ([]*Server, e
 	var servers []*Server
 	for rows.Next() {
 		var server Server
+		var credentialName *string
 		err := rows.Scan(&server.ID, &server.Name, &server.Host, &server.Port,
-			&server.Username, &server.AuthType, &server.Description,
-			&server.TagsRaw, &server.LastLoginTime, &server.CreatedAt, &server.UpdatedAt)
+			&server.Username, &server.AuthType, &server.CredentialID, &server.Description,
+			&server.TagsRaw, &server.LastLoginTime, &server.CreatedAt, &server.UpdatedAt,
+			&credentialName)
 		if err != nil {
 			return nil, err
+		}
+		if credentialName != nil {
+			server.CredentialName = *credentialName
 		}
 		server.processTags()
 		servers = append(servers, &server)
@@ -221,6 +246,9 @@ func (s *ServerService) Update(id int, req *ServerUpdate) (*Server, error) {
 	if req.PrivateKey != "" {
 		server.PrivateKey = req.PrivateKey
 	}
+	if req.CredentialID != nil {
+		server.CredentialID = req.CredentialID
+	}
 	if req.Description != "" {
 		server.Description = req.Description
 	}
@@ -232,7 +260,7 @@ func (s *ServerService) Update(id int, req *ServerUpdate) (*Server, error) {
 
 	query := `
 		UPDATE servers
-		SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, password = ?, private_key = ?, description = ?, tags = ?, updated_at = CURRENT_TIMESTAMP
+		SET name = ?, host = ?, port = ?, username = ?, auth_type = ?, password = ?, private_key = ?, credential_id = ?, description = ?, tags = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`
 	var tagsValue interface{}
@@ -242,7 +270,7 @@ func (s *ServerService) Update(id int, req *ServerUpdate) (*Server, error) {
 		tagsValue = nil
 	}
 	_, err = s.db.Exec(query, server.Name, server.Host, server.Port, server.Username,
-		server.AuthType, server.Password, server.PrivateKey, server.Description, tagsValue, id)
+		server.AuthType, server.Password, server.PrivateKey, server.CredentialID, server.Description, tagsValue, id)
 	if err != nil {
 		return nil, err
 	}

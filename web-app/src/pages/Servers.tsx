@@ -23,11 +23,11 @@ import {
   LinkOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import { serverAPI } from '../services/api';
+import { serverAPI, credentialAPI } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { useAppStore } from '../stores/appStore';
 
-import type { Server, ServerCreateRequest } from '../types';
+import type { Server, ServerCreateRequest, Credential } from '../types';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -36,6 +36,7 @@ const Servers: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
 
   const [form] = Form.useForm();
   const { user } = useAuthStore();
@@ -79,7 +80,18 @@ const Servers: React.FC = () => {
   useEffect(() => {
     if (!user) return;
     fetchServers();
+    fetchCredentials();
   }, [user, setServers]);
+
+  const fetchCredentials = async () => {
+    try {
+      const data = await credentialAPI.getCredentials();
+      setCredentials(data.credentials || []);
+    } catch (error: any) {
+      console.error('获取登录凭证列表失败:', error);
+      setCredentials([]);
+    }
+  };
 
   const handleAddServer = () => {
     setEditingServer(null);
@@ -95,6 +107,7 @@ const Servers: React.FC = () => {
       port: server.port,
       username: server.username,
       auth_type: server.auth_type,
+      credential_id: server.credential_id,
       description: server.description,
       tags: server.tags || [],
     });
@@ -118,6 +131,7 @@ const Servers: React.FC = () => {
         ...values,
         port: values.port || 22,
         tags: values.tags || [],
+        credential_id: values.credential_id,
       };
 
       if (editingServer) {
@@ -180,11 +194,20 @@ const Servers: React.FC = () => {
       title: '认证方式',
       dataIndex: 'auth_type',
       key: 'auth_type',
-      render: (authType: string) => (
-        <Tag color={authType === 'password' ? 'blue' : 'green'}>
-          {authType === 'password' ? '密码' : '密钥'}
-        </Tag>
-      ),
+      render: (authType: string, record: Server) => {
+        if (authType === 'password') {
+          return <Tag color="blue">密码</Tag>;
+        } else if (authType === 'key') {
+          return <Tag color="green">密钥</Tag>;
+        } else if (authType === 'credential') {
+          return (
+            <Tag color="purple">
+              登录凭证 {record.credential_name ? `(${record.credential_name})` : ''}
+            </Tag>
+          );
+        }
+        return <Tag>{authType}</Tag>;
+      },
     },
     {
       title: '标签',
@@ -367,6 +390,7 @@ const Servers: React.FC = () => {
                 <Select>
                   <Option value="password">密码认证</Option>
                   <Option value="key">密钥认证</Option>
+                  <Option value="credential">登录凭证</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -380,26 +404,47 @@ const Servers: React.FC = () => {
           >
             {({ getFieldValue }) => {
               const authType = getFieldValue('auth_type');
-              return authType === 'password' ? (
-                <Form.Item
-                  name="password"
-                  label="SSH 密码"
-                  rules={[{ required: true, message: '请输入SSH密码' }]}
-                >
-                  <Input.Password placeholder="请输入SSH密码" />
-                </Form.Item>
-              ) : (
-                <Form.Item
-                  name="private_key"
-                  label="私钥内容"
-                  rules={[{ required: true, message: '请输入私钥内容' }]}
-                >
-                  <Input.TextArea
-                    rows={4}
-                    placeholder="请粘贴私钥内容，例如 -----BEGIN RSA PRIVATE KEY-----"
-                  />
-                </Form.Item>
-              );
+              if (authType === 'password') {
+                return (
+                  <Form.Item
+                    name="password"
+                    label="SSH 密码"
+                    rules={[{ required: true, message: '请输入SSH密码' }]}
+                  >
+                    <Input.Password placeholder="请输入SSH密码" />
+                  </Form.Item>
+                );
+              } else if (authType === 'key') {
+                return (
+                  <Form.Item
+                    name="private_key"
+                    label="私钥内容"
+                    rules={[{ required: true, message: '请输入私钥内容' }]}
+                  >
+                    <Input.TextArea
+                      rows={4}
+                      placeholder="请粘贴私钥内容，例如 -----BEGIN RSA PRIVATE KEY-----"
+                    />
+                  </Form.Item>
+                );
+              } else if (authType === 'credential') {
+                return (
+                  <Form.Item
+                    name="credential_id"
+                    label="选择登录凭证"
+                    rules={[{ required: true, message: '请选择登录凭证' }]}
+                  >
+                    <Select placeholder="请选择已保存的登录凭证">
+                      {(credentials || []).map(credential => (
+                        <Option key={credential.id} value={credential.id}>
+                          {credential.name} ({credential.username} - {credential.type === 'password' ? '密码' : '密钥'})
+                        </Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                );
+              }
+              return null;
             }}
           </Form.Item>
 

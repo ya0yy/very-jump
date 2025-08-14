@@ -37,6 +37,7 @@ func runMigrations(db *sql.DB) error {
 		createSessionsTable,
 		createAuditLogsTable,
 		createExtraAuditTables, // 新的审计表
+		createCredentialsTable, // 登录凭证表
 		insertDefaultAdmin,
 	}
 
@@ -80,11 +81,13 @@ CREATE TABLE IF NOT EXISTS servers (
     auth_type VARCHAR(20) DEFAULT 'password',
     password VARCHAR(255),
     private_key TEXT,
+    credential_id INTEGER,
     description TEXT,
     tags TEXT,
     last_login_time DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (credential_id) REFERENCES credentials(id)
 );
 `
 
@@ -184,6 +187,21 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 CREATE INDEX IF NOT EXISTS idx_terminal_sessions_user_id ON terminal_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_terminal_sessions_status ON terminal_sessions(status);
 CREATE INDEX IF NOT EXISTS idx_security_alerts_resolved ON security_alerts(resolved);
+`
+
+const createCredentialsTable = `
+-- 创建登录凭证表
+CREATE TABLE IF NOT EXISTS credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(20) NOT NULL, -- 'password' 或 'key'
+    username VARCHAR(100) NOT NULL,
+    password VARCHAR(255), -- 当type为password时使用
+    private_key TEXT, -- 当type为key时使用
+    key_password VARCHAR(255), -- 私钥密码，可选
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `
 
 const insertDefaultAdmin = `
