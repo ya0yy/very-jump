@@ -1,5 +1,5 @@
 # 构建阶段
-FROM golang:1.21-alpine AS backend-builder
+FROM golang:1.23-alpine AS backend-builder
 
 WORKDIR /app
 
@@ -19,13 +19,13 @@ RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o very-jump cmd/ser
 # 前端构建阶段
 FROM node:18-alpine AS frontend-builder
 WORKDIR /app
-COPY web/package.json web/package-lock.json ./
+COPY web-app/package.json web-app/package-lock.json ./
 RUN npm ci
-COPY web/ .
+COPY web-app/ .
 RUN npm run build
 
 # 运行阶段
-FROM tsl0922/ttyd:1.7.7
+FROM alpine:latest
 
 # 安装运行时依赖
 RUN apk --no-cache add ca-certificates sqlite openssh-client sshpass wget
