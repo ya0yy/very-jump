@@ -18,20 +18,9 @@ services:
       - MAX_CONCURRENT_CONN=50
       - RECORDING_RETENTION=720h  # 30 days
       - LOG_RETENTION=2160h       # 90 days
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.very-jump.rule=Host(`jump.yourdomain.com`)"
-      - "traefik.http.routers.very-jump.tls=true"
-      - "traefik.http.routers.very-jump.tls.certresolver=letsencrypt"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-
-# 可选：使用外部网络（如果使用 Traefik）
-networks:
-  default:
-    external:
-      name: traefik-network

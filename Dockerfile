@@ -16,16 +16,16 @@ COPY . .
 # 构建应用
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o very-jump cmd/server/main.go
 
-# 前端构建阶段（暂时跳过，后续添加）
-# FROM node:18-alpine AS frontend-builder
-# WORKDIR /app
-# COPY web/package.json web/package-lock.json ./
-# RUN npm ci
-# COPY web/ .
-# RUN npm run build
+# 前端构建阶段
+FROM node:18-alpine AS frontend-builder
+WORKDIR /app
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ .
+RUN npm run build
 
 # 运行阶段
-FROM alpine:latest
+FROM tsl0922/ttyd:1.7.7
 
 # 安装运行时依赖
 RUN apk --no-cache add ca-certificates sqlite openssh-client sshpass wget
@@ -43,9 +43,8 @@ WORKDIR /app
 # 复制构建的二进制文件
 COPY --from=backend-builder /app/very-jump .
 
-# 创建前端目录（临时）
-RUN mkdir -p /app/web/dist && \
-    echo '<!DOCTYPE html><html><head><title>Very Jump</title></head><body><h1>Very Jump 跳板机</h1><p>前端界面开发中...</p></body></html>' > /app/web/dist/index.html
+# 复制前端构建产物
+COPY --from=frontend-builder /app/dist /app/web/dist
 
 # 创建数据目录
 RUN mkdir -p /data && chown -R appuser:appgroup /data /app
